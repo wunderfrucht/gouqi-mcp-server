@@ -1,0 +1,216 @@
+name: Release NPM Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-14
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }} --package template-mcp-server
+
+      - name: Prepare binary (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/template-mcp-server dist/
+          cd dist
+          tar -czf template-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.tar.gz template-mcp-server
+
+      - name: Prepare binary (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/template-mcp-server.exe dist/
+          cd dist
+          Compress-Archive -Path template-mcp-server.exe -DestinationPath template-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.zip
+
+      - name: Upload binary to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          FILE="dist/template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
+          
+          # Check if release exists, create if not
+          if ! gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release create "${VERSION}" --title "Release ${VERSION}" --notes "Auto-generated release for ${VERSION}"
+          fi
+          
+          # Upload or update asset
+          if gh release view "${VERSION}" --json assets --jq '.assets[].name' | grep -q "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"; then
+            gh release delete-asset "${VERSION}" "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}" --yes
+          fi
+          
+          gh release upload "${VERSION}" "${FILE}"
+
+  publish-npm:
+    name: Publish to NPM
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Update package version and dependencies
+        working-directory: npm
+        run: |
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+          
+          # Update main package version and optionalDependencies
+          jq --arg version "$VERSION" '
+            .version = $version |
+            .optionalDependencies = {
+              "@yourusername/template-mcp-server-darwin-arm64": $version,
+              "@yourusername/template-mcp-server-darwin-x64": $version,
+              "@yourusername/template-mcp-server-linux-x64": $version,
+              "@yourusername/template-mcp-server-win32-x64": $version
+            }
+          ' package.json > package.json.tmp && mv package.json.tmp package.json
+
+      - name: Install dependencies
+        working-directory: npm
+        run: npm install
+
+      - name: Publish to NPM
+        working-directory: npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create NPM release summary
+        run: |
+          echo "## 📦 NPM Package Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Package: \`@yourusername/template-mcp-server\`" >> $GITHUB_STEP_SUMMARY
+          echo "Version: \`${{ github.event.release.tag_name || github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Usage:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Run with npx (no installation)" >> $GITHUB_STEP_SUMMARY
+          echo "npx @yourusername/template-mcp-server --help" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Or install globally" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @yourusername/template-mcp-server" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  build-platform-packages:
+    name: Build Platform Packages
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            platform: darwin-arm64
+            binary: template-mcp-server
+          - target: x86_64-apple-darwin
+            platform: darwin-x64
+            binary: template-mcp-server
+          - target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+            binary: template-mcp-server
+          - target: x86_64-pc-windows-msvc
+            platform: win32-x64
+            binary: template-mcp-server.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          ARCHIVE_EXT=${{ matrix.target == 'x86_64-pc-windows-msvc' && 'zip' || 'tar.gz' }}
+          ASSET_NAME="template-mcp-server-${VERSION}-${{ matrix.target }}.${ARCHIVE_EXT}"
+          
+          # Download the release asset
+          gh release download "${VERSION}" --pattern "${ASSET_NAME}" --dir ./temp
+          
+          # Extract the binary
+          cd temp
+          if [[ "${ARCHIVE_EXT}" == "zip" ]]; then
+            unzip "${ASSET_NAME}"
+          else
+            tar -xzf "${ASSET_NAME}"
+          fi
+          
+          # Move binary to platform package directory
+          mv "${{ matrix.binary }}" "../platform-packages/${{ matrix.platform }}/"
+
+      - name: Update platform package version
+        working-directory: platform-packages/${{ matrix.platform }}
+        run: |
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+          
+          # Update platform package version
+          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp && mv package.json.tmp package.json
+
+      - name: Publish platform package
+        working-directory: platform-packages/${{ matrix.platform }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Clean up
+        run: rm -rf temp

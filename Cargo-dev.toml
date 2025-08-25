@@ -1,0 +1,25 @@
+# Development version using local paths
+# Copy this to Cargo.toml when developing with local framework
+
+[workspace]
+members = [
+    "template-mcp-server"
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Core dependencies for MCP servers
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+async-trait = "0.1"
+rand = "0.8"
+
+# PulseEngine MCP Framework - Local development versions
+pulseengine-mcp-server = { path = "../mcp-loxone-seperation/pulseengine-mcp/mcp-server", features = ["stdio-logging"] }
+pulseengine-mcp-macros = { path = "../mcp-loxone-seperation/pulseengine-mcp/mcp-macros" }
+pulseengine-mcp-protocol = { path = "../mcp-loxone-seperation/pulseengine-mcp/mcp-protocol" }
+pulseengine-mcp-transport = { path = "../mcp-loxone-seperation/pulseengine-mcp/mcp-transport" }

@@ -1,0 +1,26 @@
+{
+  "name": "template-mcp-server-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Template MCP server workspace - actual npm package is in npm/ directory",
+  "scripts": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "dev": "cargo run",
+    "lint": "cargo clippy",
+    "format": "cargo fmt",
+    "npm:install": "cd npm && npm install",
+    "npm:publish": "cd npm && npm publish",
+    "npm:pack": "cd npm && npm pack"
+  },
+  "workspaces": [
+    "npm",
+    "platform-packages/*"
+  ],
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "latest"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "@yourusername/template-mcp-server",
+  "version": "0.1.0",
+  "description": "Template MCP Server - A Model Context Protocol server template using PulseEngine MCP framework",
+  "main": "index.js",
+  "bin": {
+    "template-mcp-server": "./run.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "preuninstall": "node uninstall.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "template",
+    "server",
+    "rust",
+    "cli"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/template-mcp-server.git"
+  },
+  "homepage": "https://github.com/yourusername/template-mcp-server",
+  "bugs": {
+    "url": "https://github.com/yourusername/template-mcp-server/issues"
+  },
+  "optionalDependencies": {
+    "@yourusername/template-mcp-server-darwin-arm64": "0.1.0",
+    "@yourusername/template-mcp-server-darwin-x64": "0.1.0",
+    "@yourusername/template-mcp-server-linux-x64": "0.1.0",
+    "@yourusername/template-mcp-server-win32-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

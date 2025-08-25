@@ -1,0 +1,11 @@
+# This .npmignore is for the root directory - not used for npm publishing
+# The actual npm package is published from the npm/ directory
+
+# Everything is ignored by default for the root
+*
+
+# But keep essential documentation
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+!PUBLISHING.md

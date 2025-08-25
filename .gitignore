@@ -1,0 +1,36 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local development files
+.env
+config.local.*
+
+# MCP client configs (don't commit personal configs)
+claude_desktop_config.json
+continue_config.json
+
+# Temporary files
+tmp/
+temp/
+
+# npm build artifacts
+dist/
+*.tgz
+node_modules/
+npm/bin/
+platform-packages/*/template-mcp-server*
