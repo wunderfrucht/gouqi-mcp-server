@@ -34,3 +34,15 @@ dist/
 node_modules/
 npm/bin/
 platform-packages/*/template-mcp-server*
+
+# Python virtual environment for pre-commit tools
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+pip-log.txt
+
+# Pre-commit related files
+.secrets.baseline
