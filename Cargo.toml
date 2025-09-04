@@ -13,7 +13,7 @@ async-trait = "0.1"
 pulseengine-mcp-macros = {version = "0.9.0"}
 pulseengine-mcp-protocol = {version = "0.9.0"}
 # PulseEngine MCP Framework - Published v0.9.0
-pulseengine-mcp-server = {version = "0.9.0", features = ["stdio-logging"]}
+pulseengine-mcp-server = {version = "0.10.0", features = ["stdio-logging"]}
 pulseengine-mcp-transport = {version = "0.9.0"}
 rand = "0.8"
 schemars = {version = "0.8", features = ["derive"]}
