@@ -17,9 +17,10 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
+    DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
     GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams,
-    GetUserIssuesResult, GetUserIssuesTool, SearchIssuesParams, SearchIssuesResult,
-    SearchIssuesTool,
+    GetUserIssuesResult, GetUserIssuesTool, ListAttachmentsParams, ListAttachmentsResult,
+    ListAttachmentsTool, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -77,6 +78,8 @@ pub struct JiraMcpServer {
     search_tool: Arc<SearchIssuesTool>,
     issue_details_tool: Arc<GetIssueDetailsTool>,
     user_issues_tool: Arc<GetUserIssuesTool>,
+    list_attachments_tool: Arc<ListAttachmentsTool>,
+    download_attachment_tool: Arc<DownloadAttachmentTool>,
 }
 
 impl Default for JiraMcpServer {
@@ -144,6 +147,18 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let list_attachments_tool = Arc::new(ListAttachmentsTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
+        let download_attachment_tool = Arc::new(DownloadAttachmentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         info!("JIRA MCP Server initialized successfully");
 
         Ok(Self {
@@ -154,6 +169,8 @@ impl JiraMcpServer {
             search_tool,
             issue_details_tool,
             user_issues_tool,
+            list_attachments_tool,
+            download_attachment_tool,
         })
     }
 
@@ -195,6 +212,18 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let list_attachments_tool = Arc::new(ListAttachmentsTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
+        let download_attachment_tool = Arc::new(DownloadAttachmentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -203,6 +232,8 @@ impl JiraMcpServer {
             search_tool,
             issue_details_tool,
             user_issues_tool,
+            list_attachments_tool,
+            download_attachment_tool,
         })
     }
 
@@ -314,7 +345,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 4, // search_issues, get_issue_details, get_user_issues, get_server_status
+            tools_count: 8, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection
         })
     }
 
@@ -336,6 +367,50 @@ impl JiraMcpServer {
                 Err(anyhow::anyhow!("Failed to clear cache: {}", e))
             }
         }
+    }
+
+    /// List all attachments for a specific JIRA issue
+    ///
+    /// Returns metadata about all attachments on an issue, including filenames,
+    /// sizes, content types, and attachment IDs needed for downloading.
+    ///
+    /// # Examples
+    /// - List all attachments: `{"issue_key": "PROJ-123"}`
+    #[instrument(skip(self))]
+    pub async fn list_issue_attachments(
+        &self,
+        params: ListAttachmentsParams,
+    ) -> anyhow::Result<ListAttachmentsResult> {
+        self.list_attachments_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("list_issue_attachments failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Download attachment content from a JIRA issue
+    ///
+    /// Downloads the actual content of an attachment given its attachment ID.
+    /// Content is returned as base64 encoded string by default for safety.
+    ///
+    /// # Examples
+    /// - Download attachment: `{"attachment_id": "12345"}`
+    /// - Download with size limit: `{"attachment_id": "12345", "max_size_bytes": 5242880}`
+    /// - Download as raw content: `{"attachment_id": "12345", "base64_encoded": false}`
+    #[instrument(skip(self))]
+    pub async fn download_attachment(
+        &self,
+        params: DownloadAttachmentParams,
+    ) -> anyhow::Result<DownloadAttachmentResult> {
+        self.download_attachment_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("download_attachment failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Test JIRA connection and authentication

@@ -5,7 +5,8 @@
 
 use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
-use gouqi::{Issue, Jira, SearchOptions, Session};
+use gouqi::r#async::Jira;
+use gouqi::{Issue, SearchOptions, Session};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -129,7 +130,7 @@ impl JiraClient {
 
         let credentials = config.to_gouqi_credentials();
 
-        // Create the gouqi client with timeout
+        // Create the async gouqi client with timeout
         let client = timeout(Duration::from_secs(config.request_timeout_seconds), async {
             Jira::new(&config.jira_url, credentials)
         })
@@ -179,7 +180,7 @@ impl JiraClient {
 
         let session = timeout(timeout_duration, async {
             // Use session() method to get current user info
-            self.client.session()
+            self.client.session().await
         })
         .await
         .map_err(|_| JiraMcpError::network("Timeout getting current user"))?
@@ -223,7 +224,7 @@ impl JiraClient {
         let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
 
         let search_result = timeout(timeout_duration, async {
-            self.client.search().list(jql, &search_options)
+            self.client.search().list(jql, &search_options).await
         })
         .await
         .map_err(|_| JiraMcpError::network("Timeout during search"))?
@@ -270,7 +271,7 @@ impl JiraClient {
 
         // Get basic issue info
         let issue = timeout(timeout_duration, async {
-            self.client.issues().get(issue_key)
+            self.client.issues().get(issue_key).await
         })
         .await
         .map_err(|_| JiraMcpError::network(format!("Timeout getting issue {}", issue_key)))?

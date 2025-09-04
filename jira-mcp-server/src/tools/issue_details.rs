@@ -7,12 +7,13 @@ use crate::cache::MetadataCache;
 use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::{IssueDetails, JiraClient};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
 /// Parameters for the get_issue_details tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GetIssueDetailsParams {
     /// JIRA issue key (required)
     /// Examples: "PROJ-123", "KEY-456"
@@ -193,7 +194,7 @@ impl GetIssueDetailsTool {
         if params.issue_key.trim().is_empty() {
             return Err(JiraMcpError::invalid_param(
                 "issue_key",
-                "Issue key cannot be empty",
+                "Issue key is required. Please provide a JIRA issue key (e.g., 'PROJ-123'). Use the search_issues tool first to find issues if you don't know the key.",
             ));
         }
 

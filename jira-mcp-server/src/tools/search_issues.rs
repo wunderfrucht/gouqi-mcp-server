@@ -8,12 +8,13 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::{JiraClient, SearchResult};
 use crate::semantic_mapping::{QueryComplexity, SemanticMapper};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
 /// Parameters for the search_issues tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchIssuesParams {
     /// Natural language search text (optional)
     pub query_text: Option<String>,
@@ -156,14 +157,31 @@ impl SearchIssuesTool {
         };
 
         // Build JQL query using semantic mapper
+        // Convert empty arrays to None for better AI usability
+        let issue_types = params
+            .issue_types
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .map(|arr| arr.as_slice());
+        let status = params
+            .status
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .map(|arr| arr.as_slice());
+        let labels = params
+            .labels
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .map(|arr| arr.as_slice());
+
         let jql_result = self.semantic_mapper.build_search_jql(
             params.query_text.as_deref(),
-            params.issue_types.as_deref(),
+            issue_types,
             params.assigned_to.as_deref(),
             resolved_project_key.as_deref(),
-            params.status.as_deref(),
+            status,
             params.created_after.as_deref(),
-            params.labels.as_deref(),
+            labels,
         )?;
 
         // Apply pagination
@@ -246,40 +264,32 @@ impl SearchIssuesTool {
             }
         }
 
-        // Validate issue types (if specified)
+        // Validate issue types (if specified and non-empty)
         if let Some(issue_types) = &params.issue_types {
-            if issue_types.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "issue_types",
-                    "issue_types array cannot be empty",
-                ));
-            }
-
-            for issue_type in issue_types {
-                if issue_type.trim().is_empty() {
-                    return Err(JiraMcpError::invalid_param(
-                        "issue_types",
-                        "issue_type names cannot be empty",
-                    ));
+            // Allow empty arrays - treat as None
+            if !issue_types.is_empty() {
+                for issue_type in issue_types {
+                    if issue_type.trim().is_empty() {
+                        return Err(JiraMcpError::invalid_param(
+                            "issue_types",
+                            "issue_type names cannot be empty",
+                        ));
+                    }
                 }
             }
         }
 
-        // Validate status (if specified)
+        // Validate status (if specified and non-empty)
         if let Some(statuses) = &params.status {
-            if statuses.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "status",
-                    "status array cannot be empty",
-                ));
-            }
-
-            for status in statuses {
-                if status.trim().is_empty() {
-                    return Err(JiraMcpError::invalid_param(
-                        "status",
-                        "status names cannot be empty",
-                    ));
+            // Allow empty arrays - treat as None
+            if !statuses.is_empty() {
+                for status in statuses {
+                    if status.trim().is_empty() {
+                        return Err(JiraMcpError::invalid_param(
+                            "status",
+                            "status names cannot be empty",
+                        ));
+                    }
                 }
             }
         }
@@ -294,27 +304,23 @@ impl SearchIssuesTool {
             }
         }
 
-        // Validate labels
+        // Validate labels (if specified and non-empty)
         if let Some(labels) = &params.labels {
-            if labels.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "labels",
-                    "labels array cannot be empty",
-                ));
-            }
-
-            for label in labels {
-                if label.trim().is_empty() {
-                    return Err(JiraMcpError::invalid_param(
-                        "labels",
-                        "label names cannot be empty",
-                    ));
-                }
-                if label.contains(' ') {
-                    return Err(JiraMcpError::invalid_param(
-                        "labels",
-                        format!("label '{}' cannot contain spaces", label),
-                    ));
+            // Allow empty arrays - treat as None
+            if !labels.is_empty() {
+                for label in labels {
+                    if label.trim().is_empty() {
+                        return Err(JiraMcpError::invalid_param(
+                            "labels",
+                            "label names cannot be empty",
+                        ));
+                    }
+                    if label.contains(' ') {
+                        return Err(JiraMcpError::invalid_param(
+                            "labels",
+                            format!("label '{}' cannot contain spaces", label),
+                        ));
+                    }
                 }
             }
         }

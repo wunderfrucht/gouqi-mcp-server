@@ -8,12 +8,13 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::{JiraClient, SearchResult};
 use crate::semantic_mapping::SemanticMapper;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
 /// Parameters for the get_user_issues tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GetUserIssuesParams {
     /// Username, account ID, or special reference (optional)
     /// Examples: "me", "current_user", "john.doe", "account123", or omit for current user
@@ -250,49 +251,60 @@ impl GetUserIssuesTool {
             }
         }
 
-        // Validate arrays are not empty if specified
+        // Allow empty arrays - treat as None (more AI-friendly)
+        // Just validate content if arrays are non-empty
         if let Some(status_filter) = &params.status_filter {
-            if status_filter.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "status_filter",
-                    "status_filter array cannot be empty",
-                ));
+            for status in status_filter {
+                if status.trim().is_empty() {
+                    return Err(JiraMcpError::invalid_param(
+                        "status_filter",
+                        "status names cannot be empty",
+                    ));
+                }
             }
         }
 
         if let Some(issue_types) = &params.issue_types {
-            if issue_types.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "issue_types",
-                    "issue_types array cannot be empty",
-                ));
+            for issue_type in issue_types {
+                if issue_type.trim().is_empty() {
+                    return Err(JiraMcpError::invalid_param(
+                        "issue_types",
+                        "issue type names cannot be empty",
+                    ));
+                }
             }
         }
 
         if let Some(board_filter) = &params.board_filter {
-            if board_filter.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "board_filter",
-                    "board_filter array cannot be empty",
-                ));
+            for board in board_filter {
+                if board.trim().is_empty() {
+                    return Err(JiraMcpError::invalid_param(
+                        "board_filter",
+                        "board names cannot be empty",
+                    ));
+                }
             }
         }
 
         if let Some(project_filter) = &params.project_filter {
-            if project_filter.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "project_filter",
-                    "project_filter array cannot be empty",
-                ));
+            for project in project_filter {
+                if project.trim().is_empty() {
+                    return Err(JiraMcpError::invalid_param(
+                        "project_filter",
+                        "project keys cannot be empty",
+                    ));
+                }
             }
         }
 
         if let Some(priority_filter) = &params.priority_filter {
-            if priority_filter.is_empty() {
-                return Err(JiraMcpError::invalid_param(
-                    "priority_filter",
-                    "priority_filter array cannot be empty",
-                ));
+            for priority in priority_filter {
+                if priority.trim().is_empty() {
+                    return Err(JiraMcpError::invalid_param(
+                        "priority_filter",
+                        "priority names cannot be empty",
+                    ));
+                }
             }
         }
 
@@ -373,33 +385,54 @@ impl GetUserIssuesTool {
         params: &GetUserIssuesParams,
         _cache_hit: &mut bool,
     ) -> JiraMcpResult<AppliedFilters> {
+        // Convert empty arrays to None for better AI usability
+        let project_filter = params
+            .project_filter
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .cloned();
+        let board_filter = params
+            .board_filter
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .cloned();
+        let priority_filter = params
+            .priority_filter
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .cloned();
+
         let mut applied_filters = AppliedFilters {
             status_categories: None,
             issue_types: None,
-            projects: params.project_filter.clone(),
-            boards: params.board_filter.clone(),
+            projects: project_filter,
+            boards: board_filter,
             due_date: params.due_date_filter.clone(),
-            priorities: params.priority_filter.clone(),
+            priorities: priority_filter,
             updated_since: params.updated_since.clone(),
         };
 
-        // Resolve status categories
+        // Resolve status categories (only if non-empty)
         if let Some(status_filter) = &params.status_filter {
-            let jira_statuses = self.semantic_mapper.map_status_categories(status_filter)?;
-            applied_filters.status_categories = Some(jira_statuses);
+            if !status_filter.is_empty() {
+                let jira_statuses = self.semantic_mapper.map_status_categories(status_filter)?;
+                applied_filters.status_categories = Some(jira_statuses);
+            }
         }
 
-        // Resolve issue types
+        // Resolve issue types (only if non-empty)
         if let Some(issue_types) = &params.issue_types {
-            // Try to determine project context for better mapping
-            let project_key = params
-                .project_filter
-                .as_ref()
-                .and_then(|projects| projects.first());
-            let jira_types = self
-                .semantic_mapper
-                .map_issue_types(issue_types, project_key.map(|s| s.as_str()))?;
-            applied_filters.issue_types = Some(jira_types);
+            if !issue_types.is_empty() {
+                // Try to determine project context for better mapping
+                let project_key = params
+                    .project_filter
+                    .as_ref()
+                    .and_then(|projects| projects.first());
+                let jira_types = self
+                    .semantic_mapper
+                    .map_issue_types(issue_types, project_key.map(|s| s.as_str()))?;
+                applied_filters.issue_types = Some(jira_types);
+            }
         }
 
         // Note: Board resolution would require additional API calls, skipping for now
