@@ -7,7 +7,7 @@ anyhow = {workspace = true}
 async-trait = {workspace = true}
 base64 = "0.22"
 # JIRA integration
-gouqi = {version = "0.14.0", features = ["async"]}
+gouqi = {version = "0.15.0", features = ["async"]}
 pulseengine-mcp-macros = {workspace = true}
 pulseengine-mcp-protocol = {workspace = true}
 pulseengine-mcp-server = {workspace = true}
