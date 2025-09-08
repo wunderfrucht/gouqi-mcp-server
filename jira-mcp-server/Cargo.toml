@@ -20,7 +20,7 @@ serde_json = {workspace = true}
 thiserror = "1.0"
 tokio = {workspace = true}
 # Configuration
-toml = "0.8"
+toml = "0.9"
 tracing = {workspace = true}
 tracing-subscriber = {workspace = true}
 
