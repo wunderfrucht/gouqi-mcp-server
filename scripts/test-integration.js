@@ -36,7 +36,7 @@ init.on('close', (code) => {
     process.exit(1);
   }
   console.log('✓ Initialize request successful');
-  
+
   // Test 2: Tools list
   testToolsList();
 });

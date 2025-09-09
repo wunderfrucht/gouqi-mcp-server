@@ -39,10 +39,10 @@ Thank you for your interest in contributing! This document provides guidelines f
    ```bash
    # Build
    cargo build
-   
+
    # Test tools list
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/debug/template-mcp-server
-   
+
    # Test with MCP Inspector
    npx @modelcontextprotocol/inspector ./target/debug/template-mcp-server
    ```
@@ -107,7 +107,7 @@ Test all changes with:
    ```bash
    # Test tool discovery
    echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/debug/template-mcp-server
-   
+
    # Test tool execution
    echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"your_tool","arguments":{"param":"value"}}}' | ./target/debug/template-mcp-server
    ```

@@ -9,10 +9,10 @@ const path = require("path");
 function getPlatformPackageName() {
   const platform = os.platform();
   const arch = os.arch();
-  
+
   let platformName;
   let archName;
-  
+
   // Map Node.js platform names to our package naming convention
   switch (platform) {
     case "darwin":
@@ -27,7 +27,7 @@ function getPlatformPackageName() {
     default:
       throw new Error(`Unsupported platform: ${platform}`);
   }
-  
+
   // Map Node.js architecture names to our package naming convention
   switch (arch) {
     case "x64":
@@ -39,7 +39,7 @@ function getPlatformPackageName() {
     default:
       throw new Error(`Unsupported architecture: ${arch}`);
   }
-  
+
   return `@yourusername/template-mcp-server-${platformName}-${archName}`;
 }
 
@@ -49,7 +49,7 @@ function getPlatformPackageName() {
 function getBinaryPath() {
   const platform = os.platform();
   const binaryName = platform === "win32" ? "template-mcp-server.exe" : "template-mcp-server";
-  
+
   try {
     // Try to get the binary from the platform package
     const platformPackage = getPlatformPackageName();

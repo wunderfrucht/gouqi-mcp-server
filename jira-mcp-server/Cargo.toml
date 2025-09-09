@@ -6,6 +6,7 @@ path = "src/main.rs"
 anyhow = {workspace = true}
 async-trait = {workspace = true}
 base64 = "0.22"
+chrono = {version = "0.4", features = ["serde"]}
 # JIRA integration
 gouqi = {version = "0.14.0", features = ["async"]}
 pulseengine-mcp-macros = {workspace = true}

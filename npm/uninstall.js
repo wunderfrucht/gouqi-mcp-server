@@ -8,7 +8,7 @@ const path = require("path");
  */
 function cleanupBinaries() {
   const binDir = path.join(__dirname, "bin");
-  
+
   if (fs.existsSync(binDir)) {
     console.log("🧹 Cleaning up downloaded binaries...");
     try {

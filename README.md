@@ -1,111 +1,237 @@
-# Template MCP Server
+# JIRA MCP Server
 
-A template repository for creating Model Context Protocol (MCP) servers using the PulseEngine MCP framework in Rust.
+An AI-friendly JIRA integration server using the Model Context Protocol (MCP). This server provides semantic tools for searching, retrieving, and interacting with JIRA issues without requiring knowledge of JQL or JIRA internals.
+
+## ✨ Features
+
+- **🤖 AI-Friendly Interface**: Uses semantic parameters instead of JQL
+- **🔄 Automatic JIRA Detection**: Leverages gouqi 0.14.0 for Cloud/Server detection
+- **⚡ Smart Caching**: Metadata caching with TTL for performance
+- **🛠️ Comprehensive Tools**: Search, issue details, user issues
+- **🚦 Error Handling**: MCP-compliant error codes and messages
+- **🔐 Flexible Authentication**: Supports PAT, Basic, Bearer, and Anonymous auth
 
 ## 🚀 Quick Start
 
-1. **Use this template** by clicking the "Use this template" button on GitHub
-2. **Clone your new repository**:
-   ```bash
-   git clone https://github.com/yourusername/your-mcp-server.git
-   cd your-mcp-server
-   ```
-3. **Customize the server**:
-   - Update `Cargo.toml` with your project details
-   - Modify `src/lib.rs` to implement your tools and resources
-   - Update this README with your project information
+### Prerequisites
 
-4. **Build and test**:
-   ```bash
-   cargo build
-   # Test tools
-   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/debug/template-mcp-server
-   # Test resources  
-   echo '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}' | ./target/debug/template-mcp-server
-   ```
+- Rust 1.75.0 or later
+- Access to a JIRA instance (Cloud or Server)
+- JIRA authentication credentials
 
-## 🛠 What's Included
+### 1. Configuration
 
-This template provides:
+Set up your JIRA connection using environment variables:
 
-- **Complete MCP server setup** using PulseEngine MCP framework
-- **Automatic tool & resource discovery** with `#[mcp_tools]` and `#[mcp_resource]` macros
-- **Example tools** demonstrating different parameter types:
-  - Simple status check (no parameters)
-  - Echo with optional parameters
-  - Numeric calculations
-  - Structured data creation
-  - List processing
-  - Error handling examples
-- **Example resources** for read-only data access:
-  - Server status information (`template://server-status`)
-  - Server configuration (`template://server-config`)
-  - Parameterized data lookup (`template://example-data/{id}`)
-- **URI template support** for parameterized resources
-- **STDIO transport** for integration with MCP clients
-- **Proper logging configuration** for debugging
+```bash
+# Required: JIRA instance URL
+export JIRA_URL="https://your-company.atlassian.net"
+
+# Required: Authentication
+export JIRA_AUTH_TYPE="pat"  # or "basic", "bearer", "anonymous"
+export JIRA_TOKEN="your_personal_access_token"
+
+# Optional: Advanced settings
+export JIRA_CACHE_TTL="300"        # Cache TTL in seconds (default: 300)
+export JIRA_MAX_RESULTS="50"       # Max search results (default: 50, max: 200)
+export JIRA_REQUEST_TIMEOUT="30"   # Request timeout in seconds (default: 30)
+```
+
+### 2. Build and Run
+
+```bash
+# Clone and build
+git clone https://github.com/yourusername/gouqi-mcp-server.git
+cd gouqi-mcp-server
+cargo build --release
+
+# Run the server
+./target/release/jira-mcp-server
+```
+
+### 3. Test Connection
+
+```bash
+# Test tools
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/debug/jira-mcp-server
+
+# Test connection
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"test_connection","arguments":{}}}' | ./target/debug/jira-mcp-server
+```
+
+## 🛠️ Available Tools
+
+### `search_issues`
+Search for JIRA issues using AI-friendly semantic parameters.
+
+**Example Usage:**
+```json
+{
+  "issue_types": ["story", "bug"],
+  "assigned_to": "me",
+  "status": ["open", "in_progress"],
+  "project_key": "PROJ",
+  "created_after": "7 days ago",
+  "limit": 25
+}
+```
+
+### `get_issue_details`
+Get detailed information about a specific JIRA issue.
+
+**Example Usage:**
+```json
+{
+  "issue_key": "PROJ-123",
+  "include_comments": true,
+  "include_attachments": true
+}
+```
+
+### `get_user_issues`
+Get issues assigned to a specific user with filtering options.
+
+**Example Usage:**
+```json
+{
+  "username": "me",
+  "status_filter": ["open", "in_progress"],
+  "issue_types": ["story", "bug"],
+  "due_date_filter": "overdue"
+}
+```
+
+### `get_server_status`
+Get server status and JIRA connection information.
+
+### `test_connection`
+Test JIRA connection and authentication.
+
+### `clear_cache`
+Clear all cached metadata.
 
 ## 📁 Project Structure
 
 ```
-template-mcp-server/
-├── Cargo.toml                    # Workspace configuration
-├── template-mcp-server/
-│   ├── Cargo.toml                # Package configuration  
-│   ├── src/
-│   │   ├── main.rs               # Server entry point
-│   │   └── lib.rs                # Server implementation & tools
-├── README.md                     # This file
-├── LICENSE                       # MIT License
-└── .github/                      # GitHub templates
-    ├── ISSUE_TEMPLATE/
-    ├── PULL_REQUEST_TEMPLATE.md
-    └── dependabot.yml
+jira-mcp-server/
+├── Cargo.toml                    # Package configuration
+├── src/
+│   ├── main.rs                   # Server entry point
+│   ├── lib.rs                    # Main server implementation
+│   ├── config.rs                 # Configuration management
+│   ├── cache.rs                  # Metadata caching
+│   ├── jira_client.rs            # JIRA API wrapper
+│   ├── semantic_mapping.rs       # AI-friendly parameter mapping
+│   ├── error.rs                  # Error types and handling
+│   └── tools/                    # MCP tool implementations
+│       ├── mod.rs
+│       ├── search_issues.rs
+│       ├── issue_details.rs
+│       └── user_issues.rs
+├── config/
+│   └── jira-mcp-config.toml.example  # Configuration example
+└── README.md
 ```
 
-## 📦 Installation
+## ⚙️ Configuration
 
-### From npm (Recommended)
-
-Install globally to use with any MCP client:
+### Environment Variables (Recommended)
 
 ```bash
-npm install -g @yourusername/template-mcp-server
+# Required
+JIRA_URL="https://your-instance.atlassian.net"
+JIRA_AUTH_TYPE="pat"  # "pat", "basic", "bearer", "anonymous"
+JIRA_TOKEN="your_token"
+
+# For Basic Auth
+JIRA_USERNAME="your_username"
+JIRA_PASSWORD="your_password"
+
+# Optional
+JIRA_CACHE_TTL="300"
+JIRA_MAX_RESULTS="50"
+JIRA_REQUEST_TIMEOUT="30"
+JIRA_RATE_LIMIT="60"
 ```
 
-Or use directly with npx:
+### TOML Configuration File (Alternative)
 
-```bash
-npx @yourusername/template-mcp-server
+Copy `config/jira-mcp-config.toml.example` to `jira-mcp-config.toml` and customize:
+
+```toml
+jira_url = "https://your-company.atlassian.net"
+cache_ttl_seconds = 300
+max_search_results = 50
+
+[auth]
+type = "personal_access_token"
+token = "your_token_here"
+
+[issue_type_mappings]
+story = ["Story", "User Story"]
+bug = ["Bug", "Defect"]
+feature = ["Feature", "Enhancement"]
 ```
 
-### From Source
+## 🔌 Integration with MCP Clients
 
-1. **Prerequisites**
-   - Rust 1.75.0 or later
-   - Git
-   - Node.js 16+ (for npm distribution)
+### Claude Desktop
 
-2. **Clone and Build**
-   ```bash
-   git clone https://github.com/yourusername/template-mcp-server.git
-   cd template-mcp-server
-   cargo build --release
-   ```
+Add to your MCP configuration:
 
-3. **Run the Server**
-   ```bash
-   ./target/release/template-mcp-server
-   ```
+```json
+{
+  "servers": {
+    "jira": {
+      "command": "/path/to/jira-mcp-server",
+      "env": {
+        "JIRA_URL": "https://your-company.atlassian.net",
+        "JIRA_AUTH_TYPE": "pat",
+        "JIRA_TOKEN": "your_token"
+      }
+    }
+  }
+}
+```
 
-### Platform-Specific Binaries
+### Continue.dev
 
-Pre-built binaries are available for:
-- macOS (x64, arm64)
-- Linux (x64, arm64)
-- Windows (x64)
+```json
+{
+  "mcpServers": {
+    "jira": {
+      "command": "/path/to/jira-mcp-server",
+      "env": {
+        "JIRA_URL": "https://your-company.atlassian.net",
+        "JIRA_AUTH_TYPE": "pat",
+        "JIRA_TOKEN": "your_token"
+      }
+    }
+  }
+}
+```
 
-Download from [GitHub Releases](https://github.com/yourusername/template-mcp-server/releases)
+## 🎯 Semantic Parameters
+
+The server translates AI-friendly parameters to JIRA concepts:
+
+### Issue Types
+- `"story"` → Story, User Story
+- `"bug"` → Bug, Defect
+- `"feature"` → Feature, Enhancement
+- `"task"` → Task, Sub-task
+- `"capability"` → Capability, Epic
+
+### Status Categories
+- `"open"` → Open, To Do, Backlog, New
+- `"in_progress"` → In Progress, In Development, In Review
+- `"done"` → Done, Closed, Resolved, Complete
+- `"blocked"` → Blocked, On Hold, Waiting
+
+### User References
+- `"me"` or `"current_user"` → Authenticated user
+- `"unassigned"` → Unassigned issues
+- Any username or account ID
 
 ## 🔧 Development
 
@@ -114,9 +240,9 @@ Download from [GitHub Releases](https://github.com/yourusername/template-mcp-ser
 cargo build
 ```
 
-### Running
+### Running with Debug Logs
 ```bash
-cargo run
+RUST_LOG=debug cargo run
 ```
 
 ### Testing with MCP Inspector
@@ -125,222 +251,96 @@ cargo run
 npm install -g @modelcontextprotocol/inspector
 
 # Test your server
-npx @modelcontextprotocol/inspector ./target/debug/template-mcp-server
+npx @modelcontextprotocol/inspector ./target/debug/jira-mcp-server
 ```
 
-### Testing with Direct JSON-RPC
+### Running Tests
 ```bash
-# List available tools
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | ./target/debug/template-mcp-server
-
-# Call a tool
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_status","arguments":{}}}' | ./target/debug/template-mcp-server
-
-# List available resources
-echo '{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}' | ./target/debug/template-mcp-server
-
-# Read a resource
-echo '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"template://server-status"}}' | ./target/debug/template-mcp-server
+cargo test
 ```
 
-## 🔍 Tools vs Resources
+## 🌟 Example AI Interactions
 
-This template demonstrates both **MCP Tools** and **MCP Resources**:
-
-### Tools (Operations)
-Tools are functions that **perform operations** or **modify state**. They:
-- Take parameters as input
-- Can have side effects (create, update, delete)
-- Return results from their execution
-- Are called via `tools/call` method
-
-**Examples in template:**
-- `get_status()` - Checks server status  
-- `echo(message, prefix)` - Transforms input
-- `add_numbers(a, b)` - Performs calculations
-- `create_data(...)` - Creates new data
-
-### Resources (Read-Only Data)
-Resources provide **read-only access to data**. They:
-- Use URI templates for identification  
-- Cannot modify state (read-only)
-- Are accessed via `resources/read` method
-- Perfect for configuration, status, or reference data
-
-**Examples in template:**
-- `template://server-status` - Current server status
-- `template://server-config` - Server configuration  
-- `template://example-data/{id}` - Data lookup by ID
-
-### When to Use Each
-
-| Use Tools For | Use Resources For |
-|---------------|-------------------|
-| Operations & actions | Read-only data access |
-| Data modification | Configuration settings |
-| Calculations | Status information |
-| API calls | Reference data |
-| File operations | Cached data |
-| Dynamic processing | Static information |
-
-## 📝 Customizing Your Server
-
-### 1. Update Package Information
-Edit `template-mcp-server/Cargo.toml`:
-```toml
-[package]
-name = "your-mcp-server"
-description = "Your server description"
-authors = ["Your Name <your.email@example.com>"]
-repository = "https://github.com/yourusername/your-mcp-server"
+**Find my open stories:**
+```
+AI: "Show me all the stories assigned to me that are currently open or in progress"
+→ Uses: search_issues with {"issue_types": ["story"], "assigned_to": "me", "status": ["open", "in_progress"]}
 ```
 
-### 2. Implement Your Tools
-In `src/lib.rs`, modify the `#[mcp_tools]` impl block:
-```rust
-#[mcp_tools]
-impl YourMcpServer {
-    /// Your custom tool
-    pub async fn your_tool(&self, param: String) -> anyhow::Result<String> {
-        // Your implementation here
-        Ok(format!("Result: {}", param))
-    }
-}
+**Get issue details:**
+```
+AI: "What's the current status and description of PROJ-123?"
+→ Uses: get_issue_details with {"issue_key": "PROJ-123"}
 ```
 
-### 3. Add Server State
-Add fields to your server struct:
-```rust
-#[mcp_server(name = "Your Server")]
-#[derive(Clone)]
-pub struct YourMcpServer {
-    data: Arc<RwLock<HashMap<String, String>>>,
-    config: YourConfig,
-}
+**Find overdue bugs:**
+```
+AI: "Show me all bugs that are overdue"
+→ Uses: search_issues with {"issue_types": ["bug"], "created_after": "30 days ago", "status": ["open", "in_progress"]}
 ```
 
-### 4. Update Server Configuration
-Modify the `#[mcp_server]` attributes:
-```rust
-#[mcp_server(
-    name = "Your Amazing MCP Server",
-    version = "1.0.0",
-    description = "Does amazing things",
-    auth = "file"  // or "memory", "disabled"
-)]
-```
+## 🚨 Troubleshooting
 
-## 🔌 Integration with MCP Clients
+### Connection Issues
+1. Verify JIRA_URL is correct and accessible
+2. Check authentication credentials
+3. Test with `test_connection` tool
+4. Check firewall/network restrictions
 
-### Claude Desktop
+### Authentication Issues
+- **Jira Cloud**: Use Personal Access Token (PAT)
+- **Jira Server**: Use username/password or API token
+- Verify token permissions and expiration
 
-Using npm installation:
-```json
-{
-  "servers": {
-    "your-server": {
-      "command": "npx",
-      "args": ["@yourusername/template-mcp-server"]
-    }
-  }
-}
-```
+### Performance Issues
+- Check cache TTL settings
+- Monitor API rate limits
+- Use more specific search filters
+- Consider increasing `JIRA_REQUEST_TIMEOUT`
 
-Using local binary:
-```json
-{
-  "servers": {
-    "your-server": {
-      "command": "/path/to/your-mcp-server",
-      "args": []
-    }
-  }
-}
-```
+## 🔒 Security
 
-### Continue.dev
-
-Using npm installation:
-```json
-{
-  "mcpServers": {
-    "your-server": {
-      "command": "npx",
-      "args": ["@yourusername/template-mcp-server"]
-    }
-  }
-}
-```
-
-Using local binary:
-```json
-{
-  "mcpServers": {
-    "your-server": {
-      "command": "/path/to/your-mcp-server"
-    }
-  }
-}
-```
-
-## 📚 Framework Features
-
-This template uses the PulseEngine MCP framework which provides:
-
-- **Automatic tool discovery** - Public methods become MCP tools
-- **Type-safe parameter handling** - Automatic JSON deserialization
-- **Error handling** - Proper MCP error responses
-- **Authentication** - Optional auth with multiple backends
-- **Transport support** - STDIO, HTTP, WebSocket
-- **Monitoring** - Built-in metrics and tracing
-- **Validation** - Request/response validation
-
-## 🔐 Authentication
-
-The template includes authentication support:
-
-- `auth = "disabled"` - No authentication (development)
-- `auth = "memory"` - In-memory auth (testing)  
-- `auth = "file"` - File-based auth (production)
-
-For production use, configure file-based auth:
-```rust
-#[mcp_server(auth = "file")]
-```
+- Never commit credentials to version control
+- Use environment variables for sensitive data
+- Rotate tokens regularly
+- Use least-privilege access tokens
+- Monitor API usage and access logs
 
 ## 📊 Monitoring & Debugging
 
-The server includes comprehensive logging. Set log levels:
+Set log levels for debugging:
 ```bash
-RUST_LOG=debug ./target/debug/template-mcp-server
+RUST_LOG=debug ./target/debug/jira-mcp-server     # Debug level
+RUST_LOG=trace ./target/debug/jira-mcp-server     # Verbose trace level
 ```
+
+Log output includes:
+- Tool invocations and parameters
+- JIRA API calls and responses
+- Cache operations and hit/miss rates
+- Performance timing information
+- Error details and stack traces
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes  
+3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
 
 ## 📄 License
 
-This template is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-## 🆘 Support
+## 🆘 Support & Resources
 
-- [PulseEngine MCP Documentation](https://docs.rs/pulseengine-mcp-protocol)
-- [MCP Specification](https://modelcontextprotocol.io/specification/2025-06-18)
-- [GitHub Issues](https://github.com/yourusername/your-mcp-server/issues)
+- [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/)
+- [Gouqi JIRA Client Documentation](https://docs.rs/gouqi)
+- [PulseEngine MCP Framework](https://docs.rs/pulseengine-mcp-protocol)
+- [JIRA REST API Documentation](https://developer.atlassian.com/cloud/jira/platform/rest/)
+- [GitHub Issues](https://github.com/yourusername/gouqi-mcp-server/issues)
 
-## 🏷 Template Usage
+---
 
-When using this template:
-
-1. **Click "Use this template"** on GitHub
-2. **Create your repository** with a descriptive name
-3. **Clone and customize** as described above
-4. **Delete this section** from your README
-5. **Update all placeholder information** with your project details
-
-Happy building! 🎉
+**🎉 Happy JIRA automation with AI!**

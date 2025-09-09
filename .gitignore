@@ -46,3 +46,4 @@ pip-log.txt
 
 # Pre-commit related files
 .secrets.baseline
+.claude/

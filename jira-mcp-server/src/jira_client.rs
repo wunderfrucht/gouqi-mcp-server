@@ -5,11 +5,12 @@
 
 use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
+use gouqi::issues::AddComment;
 use gouqi::r#async::Jira;
-use gouqi::{Issue, SearchOptions, Session};
+use gouqi::{Comment, Issue, SearchOptions, Session};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
 use tracing::{debug, error, info, instrument};
 
@@ -355,6 +356,37 @@ impl JiraClient {
         }
     }
 
+    /// Convert gouqi Comment to our CommentInfo format
+    fn convert_comment_info(&self, comment: &Comment) -> CommentInfo {
+        CommentInfo {
+            id: comment.id.clone().unwrap_or_else(|| {
+                format!(
+                    "comment-{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                )
+            }),
+            author: comment
+                .author
+                .as_ref()
+                .map(|u| u.display_name.clone())
+                .unwrap_or_else(|| "Unknown".to_string()),
+            body: comment.body.clone(),
+            created: comment
+                .created
+                .as_ref()
+                .map(|dt| dt.to_string())
+                .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string()),
+            updated: comment
+                .updated
+                .as_ref()
+                .map(|dt| dt.to_string())
+                .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string()),
+        }
+    }
+
     /// Get user information by username or account ID
     #[instrument(skip(self))]
     pub async fn get_user_by_identifier(&self, identifier: &str) -> JiraMcpResult<UserInfo> {
@@ -370,6 +402,47 @@ impl JiraClient {
             email_address: None,
             active: true,
         })
+    }
+
+    /// Add a comment to a JIRA issue
+    #[instrument(skip(self))]
+    pub async fn add_comment(
+        &self,
+        issue_key: &str,
+        comment_body: &str,
+    ) -> JiraMcpResult<CommentInfo> {
+        info!("Adding comment to issue: {}", issue_key);
+
+        let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
+
+        // Create the comment request
+        let add_comment = AddComment {
+            body: comment_body.to_string(),
+        };
+
+        // Call the real gouqi comment API
+        let comment = timeout(timeout_duration, async {
+            self.client.issues().comment(issue_key, add_comment).await
+        })
+        .await
+        .map_err(|_| {
+            JiraMcpError::network(format!("Timeout adding comment to issue {}", issue_key))
+        })?
+        .map_err(|e| {
+            if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                JiraMcpError::not_found("issue", issue_key)
+            } else if e.to_string().contains("403") || e.to_string().contains("Forbidden") {
+                JiraMcpError::permission(format!(
+                    "Permission denied adding comment to issue {}",
+                    issue_key
+                ))
+            } else {
+                JiraMcpError::from(e)
+            }
+        })?;
+
+        info!("Successfully added comment to issue {}", issue_key);
+        Ok(self.convert_comment_info(&comment))
     }
 
     /// Build a JQL query for user-assigned issues

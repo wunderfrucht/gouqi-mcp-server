@@ -1,15 +1,16 @@
 //! JIRA MCP Server Library
 //!
 //! An AI-friendly JIRA integration server using the Model Context Protocol (MCP).
-//! This server provides semantic tools for searching, retrieving, and interacting
-//! with JIRA issues without requiring knowledge of JQL or JIRA internals.
+//! This server provides semantic tools for searching, retrieving, commenting on, and analyzing
+//! relationships between JIRA issues without requiring knowledge of JQL or JIRA internals.
 //!
 //! ## Features
 //!
 //! - **AI-Friendly Interface**: Uses semantic parameters instead of JQL
-//! - **Automatic JIRA Detection**: Leverages gouqi 0.14.0 for Cloud/Server detection
+//! - **Real JIRA API Integration**: Leverages gouqi 0.14.0 for Cloud/Server operations
 //! - **Smart Caching**: Metadata caching with TTL for performance
-//! - **Comprehensive Tools**: Search, issue details, user issues
+//! - **Comprehensive Tools**: Search, issue details, user issues, commenting, relationship analysis
+//! - **Issue Interaction**: Add comments and analyze issue relationship graphs
 //! - **Error Handling**: MCP-compliant error codes and messages
 
 use crate::cache::{MetadataCache, UserMapping};
@@ -17,10 +18,12 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
-    DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
-    GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams,
-    GetUserIssuesResult, GetUserIssuesTool, ListAttachmentsParams, ListAttachmentsResult,
-    ListAttachmentsTool, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
+    AddCommentParams, AddCommentResult, AddCommentTool, DownloadAttachmentParams,
+    DownloadAttachmentResult, DownloadAttachmentTool, GetIssueDetailsParams, GetIssueDetailsResult,
+    GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool,
+    IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
+    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, SearchIssuesParams,
+    SearchIssuesResult, SearchIssuesTool,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -57,7 +60,7 @@ pub struct JiraServerStatus {
 #[mcp_server(
     name = "JIRA MCP Server",
     version = "0.1.0",
-    description = "AI-friendly JIRA integration server with semantic search capabilities",
+    description = "AI-friendly JIRA integration server with semantic search, commenting, and relationship analysis capabilities",
     auth = "disabled" // Start with disabled for development, can be changed to "file" for production
 )]
 #[derive(Clone)]
@@ -80,6 +83,8 @@ pub struct JiraMcpServer {
     user_issues_tool: Arc<GetUserIssuesTool>,
     list_attachments_tool: Arc<ListAttachmentsTool>,
     download_attachment_tool: Arc<DownloadAttachmentTool>,
+    add_comment_tool: Arc<AddCommentTool>,
+    issue_relationships_tool: Arc<IssueRelationshipsTool>,
 }
 
 impl Default for JiraMcpServer {
@@ -159,6 +164,18 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let add_comment_tool = Arc::new(AddCommentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
+        let issue_relationships_tool = Arc::new(IssueRelationshipsTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         info!("JIRA MCP Server initialized successfully");
 
         Ok(Self {
@@ -171,6 +188,8 @@ impl JiraMcpServer {
             user_issues_tool,
             list_attachments_tool,
             download_attachment_tool,
+            add_comment_tool,
+            issue_relationships_tool,
         })
     }
 
@@ -224,6 +243,18 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let add_comment_tool = Arc::new(AddCommentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
+        let issue_relationships_tool = Arc::new(IssueRelationshipsTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -234,6 +265,8 @@ impl JiraMcpServer {
             user_issues_tool,
             list_attachments_tool,
             download_attachment_tool,
+            add_comment_tool,
+            issue_relationships_tool,
         })
     }
 
@@ -345,7 +378,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 8, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection
+            tools_count: 10, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, get_issue_relationships
         })
     }
 
@@ -454,6 +487,47 @@ impl JiraMcpServer {
                 Ok(message) // Return as success with error message for user feedback
             }
         }
+    }
+
+    /// Add a comment to a JIRA issue
+    ///
+    /// Adds a comment to the specified JIRA issue with the provided text content.
+    /// This tool provides a simple way to add comments without requiring knowledge
+    /// of JIRA's comment API structure.
+    ///
+    /// # Examples
+    /// - Add a simple comment: `{"issue_key": "PROJ-123", "comment_body": "This looks good to me!"}`
+    /// - Add a detailed comment: `{"issue_key": "PROJ-123", "comment_body": "I've tested this feature and found the following:\n\n1. Works as expected\n2. Performance is good\n3. Ready for deployment"}`
+    #[instrument(skip(self))]
+    pub async fn add_comment(&self, params: AddCommentParams) -> anyhow::Result<AddCommentResult> {
+        self.add_comment_tool.execute(params).await.map_err(|e| {
+            error!("add_comment failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Extract issue relationship graph
+    ///
+    /// Analyzes JIRA issue relationships to build a comprehensive relationship graph
+    /// showing how issues are connected through links, subtasks, epics, and other relationships.
+    /// This tool helps understand issue dependencies, blockers, and project structure.
+    ///
+    /// # Examples
+    /// - Basic relationship extraction: `{"root_issue_key": "PROJ-123"}`
+    /// - Deep relationship analysis: `{"root_issue_key": "PROJ-123", "max_depth": 3}`
+    /// - Custom relationship filters: `{"root_issue_key": "PROJ-123", "include_duplicates": true, "include_epic_links": false}`
+    #[instrument(skip(self))]
+    pub async fn get_issue_relationships(
+        &self,
+        params: IssueRelationshipsParams,
+    ) -> anyhow::Result<IssueRelationshipsResult> {
+        self.issue_relationships_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("get_issue_relationships failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 }
 

@@ -33,7 +33,7 @@ What the tool does and when to use it.
     "required": true
   },
   "param2": {
-    "type": "number", 
+    "type": "number",
     "description": "Optional parameter",
     "required": false
   }

@@ -37,7 +37,7 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             archive: zip
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,17 +73,17 @@ jobs:
         run: |
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           FILE="dist/template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
-          
+
           # Check if release exists, create if not
           if ! gh release view "${VERSION}" >/dev/null 2>&1; then
             gh release create "${VERSION}" --title "Release ${VERSION}" --notes "Auto-generated release for ${VERSION}"
           fi
-          
+
           # Upload or update asset
           if gh release view "${VERSION}" --json assets --jq '.assets[].name' | grep -q "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"; then
             gh release delete-asset "${VERSION}" "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}" --yes
           fi
-          
+
           gh release upload "${VERSION}" "${FILE}"
 
   publish-npm:
@@ -106,7 +106,7 @@ jobs:
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           # Remove 'v' prefix if present
           VERSION=${VERSION#v}
-          
+
           # Update main package version and optionalDependencies
           jq --arg version "$VERSION" '
             .version = $version |
@@ -181,10 +181,10 @@ jobs:
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           ARCHIVE_EXT=${{ matrix.target == 'x86_64-pc-windows-msvc' && 'zip' || 'tar.gz' }}
           ASSET_NAME="template-mcp-server-${VERSION}-${{ matrix.target }}.${ARCHIVE_EXT}"
-          
+
           # Download the release asset
           gh release download "${VERSION}" --pattern "${ASSET_NAME}" --dir ./temp
-          
+
           # Extract the binary
           cd temp
           if [[ "${ARCHIVE_EXT}" == "zip" ]]; then
@@ -192,7 +192,7 @@ jobs:
           else
             tar -xzf "${ASSET_NAME}"
           fi
-          
+
           # Move binary to platform package directory
           mv "${{ matrix.binary }}" "../platform-packages/${{ matrix.platform }}/"
 
@@ -202,7 +202,7 @@ jobs:
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           # Remove 'v' prefix if present
           VERSION=${VERSION#v}
-          
+
           # Update platform package version
           jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp && mv package.json.tmp package.json
 

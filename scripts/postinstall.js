@@ -19,7 +19,7 @@ async function downloadBinary() {
 
   const platform = process.platform;
   const arch = process.arch;
-  
+
   // Map to expected binary names in GitHub releases
   const binaryMap = {
     'darwin-x64': 'template-mcp-server-darwin-x64',
@@ -41,7 +41,7 @@ async function downloadBinary() {
   try {
     // Get latest release info
     const releaseInfo = await fetchJson(GITHUB_RELEASES_URL);
-    
+
     // Find the asset URL for our platform
     const asset = releaseInfo.assets.find(a => a.name === binaryName);
     if (!asset) {
@@ -96,7 +96,7 @@ function downloadFile(url, dest) {
         downloadFile(response.headers.location, dest).then(resolve).catch(reject);
         return;
       }
-      
+
       response.pipe(file);
       file.on('finish', () => {
         file.close(resolve);
