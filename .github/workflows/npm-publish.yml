@@ -48,23 +48,23 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }} --package template-mcp-server
+        run: cargo build --release --target ${{ matrix.target }} --package jira-mcp-server
 
       - name: Prepare binary (Unix)
         if: matrix.archive == 'tar.gz'
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/template-mcp-server dist/
+          cp target/${{ matrix.target }}/release/jira-mcp-server dist/
           cd dist
-          tar -czf template-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.tar.gz template-mcp-server
+          tar -czf jira-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.tar.gz jira-mcp-server
 
       - name: Prepare binary (Windows)
         if: matrix.archive == 'zip'
         run: |
           mkdir dist
-          cp target/${{ matrix.target }}/release/template-mcp-server.exe dist/
+          cp target/${{ matrix.target }}/release/jira-mcp-server.exe dist/
           cd dist
-          Compress-Archive -Path template-mcp-server.exe -DestinationPath template-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.zip
+          Compress-Archive -Path jira-mcp-server.exe -DestinationPath jira-mcp-server-${{ github.event.release.tag_name || github.event.inputs.version }}-${{ matrix.target }}.zip
 
       - name: Upload binary to release
         shell: bash
@@ -72,7 +72,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
-          FILE="dist/template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
+          FILE="dist/jira-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
 
           # Check if release exists, create if not
           if ! gh release view "${VERSION}" >/dev/null 2>&1; then
@@ -80,8 +80,8 @@ jobs:
           fi
 
           # Upload or update asset
-          if gh release view "${VERSION}" --json assets --jq '.assets[].name' | grep -q "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"; then
-            gh release delete-asset "${VERSION}" "template-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}" --yes
+          if gh release view "${VERSION}" --json assets --jq '.assets[].name' | grep -q "jira-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"; then
+            gh release delete-asset "${VERSION}" "jira-mcp-server-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}" --yes
           fi
 
           gh release upload "${VERSION}" "${FILE}"
@@ -111,10 +111,10 @@ jobs:
           jq --arg version "$VERSION" '
             .version = $version |
             .optionalDependencies = {
-              "@yourusername/template-mcp-server-darwin-arm64": $version,
-              "@yourusername/template-mcp-server-darwin-x64": $version,
-              "@yourusername/template-mcp-server-linux-x64": $version,
-              "@yourusername/template-mcp-server-win32-x64": $version
+              "@wunderfrucht/jira-mcp-server-darwin-arm64": $version,
+              "@wunderfrucht/jira-mcp-server-darwin-x64": $version,
+              "@wunderfrucht/jira-mcp-server-linux-x64": $version,
+              "@wunderfrucht/jira-mcp-server-win32-x64": $version
             }
           ' package.json > package.json.tmp && mv package.json.tmp package.json
 
@@ -132,16 +132,16 @@ jobs:
         run: |
           echo "## 📦 NPM Package Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Package: \`@yourusername/template-mcp-server\`" >> $GITHUB_STEP_SUMMARY
+          echo "Package: \`@wunderfrucht/jira-mcp-server\`" >> $GITHUB_STEP_SUMMARY
           echo "Version: \`${{ github.event.release.tag_name || github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Usage:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "# Run with npx (no installation)" >> $GITHUB_STEP_SUMMARY
-          echo "npx @yourusername/template-mcp-server --help" >> $GITHUB_STEP_SUMMARY
+          echo "npx @wunderfrucht/jira-mcp-server --help" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Or install globally" >> $GITHUB_STEP_SUMMARY
-          echo "npm install -g @yourusername/template-mcp-server" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @wunderfrucht/jira-mcp-server" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   build-platform-packages:
@@ -153,16 +153,16 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             platform: darwin-arm64
-            binary: template-mcp-server
+            binary: jira-mcp-server
           - target: x86_64-apple-darwin
             platform: darwin-x64
-            binary: template-mcp-server
+            binary: jira-mcp-server
           - target: x86_64-unknown-linux-gnu
             platform: linux-x64
-            binary: template-mcp-server
+            binary: jira-mcp-server
           - target: x86_64-pc-windows-msvc
             platform: win32-x64
-            binary: template-mcp-server.exe
+            binary: jira-mcp-server.exe
 
     steps:
       - name: Checkout repository
@@ -180,7 +180,7 @@ jobs:
         run: |
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           ARCHIVE_EXT=${{ matrix.target == 'x86_64-pc-windows-msvc' && 'zip' || 'tar.gz' }}
-          ASSET_NAME="template-mcp-server-${VERSION}-${{ matrix.target }}.${ARCHIVE_EXT}"
+          ASSET_NAME="jira-mcp-server-${VERSION}-${{ matrix.target }}.${ARCHIVE_EXT}"
 
           # Download the release asset
           gh release download "${VERSION}" --pattern "${ASSET_NAME}" --dir ./temp
