@@ -17,7 +17,7 @@ use tracing::{debug, error, info, instrument};
 /// JIRA client wrapper that provides MCP-friendly operations
 #[derive(Debug, Clone)]
 pub struct JiraClient {
-    client: Arc<Jira>,
+    pub(crate) client: Arc<Jira>,
     config: Arc<JiraConfig>,
 }
 
@@ -270,55 +270,104 @@ impl JiraClient {
 
         let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
 
-        // Get basic issue info
-        let issue = timeout(timeout_duration, async {
-            self.client.issues().get(issue_key).await
-        })
-        .await
-        .map_err(|_| JiraMcpError::network(format!("Timeout getting issue {}", issue_key)))?
-        .map_err(|e| {
-            if e.to_string().contains("404") || e.to_string().contains("Not Found") {
-                JiraMcpError::not_found("issue", issue_key)
-            } else {
-                JiraMcpError::from(e)
-            }
-        })?;
+        // Build expand parameters
+        let mut expand_fields = Vec::new();
+        if include_comments {
+            expand_fields.push("comment");
+        }
+        if include_history {
+            expand_fields.push("changelog");
+        }
+
+        // Get issue with expand parameters
+        let issue = if !expand_fields.is_empty() {
+            let expand_param = expand_fields.join(",");
+            let endpoint = format!("/issue/{}?expand={}", issue_key, expand_param);
+
+            timeout(timeout_duration, async {
+                self.client.get("api", &endpoint).await
+            })
+            .await
+            .map_err(|_| JiraMcpError::network(format!("Timeout getting issue {}", issue_key)))?
+            .map_err(|e| {
+                if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                    JiraMcpError::not_found("issue", issue_key)
+                } else {
+                    JiraMcpError::from(e)
+                }
+            })?
+        } else {
+            timeout(timeout_duration, async {
+                self.client.issues().get(issue_key).await
+            })
+            .await
+            .map_err(|_| JiraMcpError::network(format!("Timeout getting issue {}", issue_key)))?
+            .map_err(|e| {
+                if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                    JiraMcpError::not_found("issue", issue_key)
+                } else {
+                    JiraMcpError::from(e)
+                }
+            })?
+        };
 
         let issue_info = self.convert_issue_info(&issue);
 
-        // Get additional information based on flags
+        // Extract comments from issue if requested
         let comments = if include_comments {
-            // Note: gouqi might not have direct comment fetching, this would need to be implemented
-            // For now, returning None
-            None
+            issue.comments().map(|comments_obj| {
+                comments_obj
+                    .comments
+                    .iter()
+                    .map(|c| self.convert_comment_info(c))
+                    .collect()
+            })
         } else {
             None
         };
 
+        // Extract attachments from issue fields if requested
         let attachments = if include_attachments {
-            // Note: gouqi might not have direct attachment fetching, this would need to be implemented
-            // For now, returning None
-            None
+            issue
+                .field::<Vec<gouqi::Attachment>>("attachment")
+                .and_then(|result| result.ok())
+                .map(|attachments_vec| {
+                    attachments_vec
+                        .iter()
+                        .map(|a| self.convert_attachment_info(a))
+                        .collect()
+                })
         } else {
             None
         };
 
+        // Extract changelog (history) from issue if requested
         let history = if include_history {
-            // Note: gouqi might not have direct history fetching, this would need to be implemented
-            // For now, returning None
-            None
+            issue
+                .field::<gouqi::Changelog>("changelog")
+                .and_then(|result| result.ok())
+                .map(|changelog| {
+                    changelog
+                        .histories
+                        .iter()
+                        .map(|h| self.convert_history_entry(h))
+                        .collect()
+                })
         } else {
             None
         };
+
+        // Extract linked issues
+        let linked_issues = self.extract_linked_issues(&issue);
 
         Ok(IssueDetails {
             issue_info,
             comments,
             attachments,
             history,
-            subtasks: Vec::new(),      // Would be populated from issue links
-            parent: None,              // Would be populated from issue links
-            linked_issues: Vec::new(), // Would be populated from issue links
+            subtasks: Vec::new(), // TODO: Extract from issuelinks where link type is subtask
+            parent: None,         // TODO: Extract from parent field
+            linked_issues,
         })
     }
 
@@ -385,6 +434,85 @@ impl JiraClient {
                 .map(|dt| dt.to_string())
                 .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string()),
         }
+    }
+
+    /// Convert gouqi Attachment to our AttachmentInfo format
+    fn convert_attachment_info(&self, attachment: &gouqi::Attachment) -> AttachmentInfo {
+        AttachmentInfo {
+            id: attachment.id.clone(),
+            filename: attachment.filename.clone(),
+            author: attachment.author.display_name.clone(),
+            created: attachment.created.clone(),
+            size: attachment.size,
+            mime_type: attachment.mime_type.clone(),
+        }
+    }
+
+    /// Convert gouqi History to our HistoryEntry format
+    fn convert_history_entry(&self, history: &gouqi::History) -> HistoryEntry {
+        // Generate a pseudo-ID from timestamp and author
+        let id = format!(
+            "history-{}-{}",
+            history.created.replace([':', '.', '-'], ""),
+            history.author.name.as_deref().unwrap_or("unknown")
+        );
+
+        HistoryEntry {
+            id,
+            author: history.author.display_name.clone(),
+            created: history.created.clone(),
+            items: history
+                .items
+                .iter()
+                .map(|item| HistoryItem {
+                    field: item.field.clone(),
+                    field_type: "custom".to_string(), // gouqi doesn't provide field_type
+                    from: item.from.clone(),
+                    from_string: item.from_string.clone(),
+                    to: item.to.clone(),
+                    to_string: item.to_string.clone(),
+                })
+                .collect(),
+        }
+    }
+
+    /// Extract linked issues from an Issue
+    fn extract_linked_issues(&self, issue: &Issue) -> Vec<LinkedIssue> {
+        issue
+            .links()
+            .and_then(|result| result.ok())
+            .map(|links| {
+                links
+                    .iter()
+                    .filter_map(|link| {
+                        // Extract the linked issue information
+                        if let Some(outward_issue) = &link.outward_issue {
+                            Some(LinkedIssue {
+                                key: outward_issue.key.clone(),
+                                summary: outward_issue.summary().unwrap_or_default(),
+                                status: outward_issue
+                                    .status()
+                                    .map(|s| s.name.clone())
+                                    .unwrap_or_else(|| "Unknown".to_string()),
+                                link_type: link.link_type.outward.clone(),
+                                direction: "outward".to_string(),
+                            })
+                        } else {
+                            link.inward_issue.as_ref().map(|inward_issue| LinkedIssue {
+                                key: inward_issue.key.clone(),
+                                summary: inward_issue.summary().unwrap_or_default(),
+                                status: inward_issue
+                                    .status()
+                                    .map(|s| s.name.clone())
+                                    .unwrap_or_else(|| "Unknown".to_string()),
+                                link_type: link.link_type.inward.clone(),
+                                direction: "inward".to_string(),
+                            })
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Get user information by username or account ID
