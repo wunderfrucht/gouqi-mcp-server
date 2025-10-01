@@ -8,11 +8,12 @@ use crate::cache::MetadataCache;
 use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
+use gouqi::relationships::GraphOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument};
 
 /// Parameters for extracting issue relationship graphs
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -181,81 +182,142 @@ impl IssueRelationshipsTool {
         // Validate the root issue key format
         self.validate_issue_key(&params.root_issue_key)?;
 
-        // For now, we'll create a basic implementation that gets the root issue and its direct links
-        // In a full implementation, this would use gouqi's get_relationship_graph method
+        // Build GraphOptions from parameters
+        let options = self.build_graph_options(&params);
 
-        let root_issue = self
+        debug!(
+            "Built graph options with include_types: {:?}",
+            options.include_types
+        );
+
+        // Use gouqi's built-in recursive relationship graph extraction
+        let graph = self
             .jira_client
-            .get_issue_details(
-                &params.root_issue_key,
-                false, // comments
-                false, // attachments
-                false, // history
-            )
+            .client
+            .issues()
+            .get_relationship_graph(&params.root_issue_key, params.max_depth, Some(options))
+            .await
+            .map_err(|e| {
+                if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                    JiraMcpError::not_found("issue", &params.root_issue_key)
+                } else {
+                    JiraMcpError::from(e)
+                }
+            })?;
+
+        // Convert gouqi's RelationshipGraph to our MCP format
+        let result = self
+            .convert_graph_to_result(graph, params, start_time)
             .await?;
 
+        info!(
+            "Relationship extraction completed in {}ms: {} issues, {} relationships",
+            result.execution_time_ms,
+            result.summary.total_issues,
+            result.summary.total_relationships
+        );
+
+        Ok(result)
+    }
+
+    /// Build GraphOptions from parameters
+    fn build_graph_options(&self, params: &IssueRelationshipsParams) -> GraphOptions {
+        let mut include_types = Vec::new();
+
+        // Build include_types based on parameter flags
+        if params.include_blocks {
+            include_types.push("Blocks".to_string());
+            include_types.push("blocks".to_string());
+        }
+
+        if params.include_relates {
+            include_types.push("Relates".to_string());
+            include_types.push("relates to".to_string());
+        }
+
+        if params.include_duplicates {
+            include_types.push("Duplicate".to_string());
+            include_types.push("Duplicates".to_string());
+        }
+
+        // Note: subtasks and epic links are handled separately in gouqi's graph structure
+        // They're not filtered via include_types
+
+        GraphOptions {
+            include_types: if include_types.is_empty() {
+                None // Include all types if none specified
+            } else {
+                Some(include_types)
+            },
+            exclude_types: None,
+            include_custom: true, // Include custom link types
+            bidirectional: true,  // Include both inward and outward links
+        }
+    }
+
+    /// Convert gouqi's RelationshipGraph to our MCP result format
+    async fn convert_graph_to_result(
+        &self,
+        graph: gouqi::relationships::RelationshipGraph,
+        params: IssueRelationshipsParams,
+        start_time: Instant,
+    ) -> JiraMcpResult<IssueRelationshipsResult> {
         let mut nodes = Vec::new();
         let mut relationships = Vec::new();
         let mut issues_by_depth = std::collections::HashMap::new();
         let mut relationships_by_type = std::collections::HashMap::new();
-        let inaccessible_issues = Vec::new();
+        let mut inaccessible_issues = Vec::new();
 
-        // Add root issue as a node
-        let root_node = IssueNode {
-            key: root_issue.issue_info.key.clone(),
-            summary: root_issue.issue_info.summary.clone(),
-            issue_type: root_issue.issue_info.issue_type.clone(),
-            status: root_issue.issue_info.status.clone(),
-            priority: root_issue.issue_info.priority.clone(),
-            assignee: root_issue.issue_info.assignee.clone(),
-            project_key: root_issue.issue_info.project_key.clone(),
-            depth: 0,
-        };
-
-        nodes.push(root_node);
-        issues_by_depth.insert(0, 1);
-
-        // Add linked issues from the root issue
-        for linked_issue in &root_issue.linked_issues {
-            // Add linked issue as a node
-            let linked_node = IssueNode {
-                key: linked_issue.key.clone(),
-                summary: linked_issue.summary.clone(),
-                issue_type: "Unknown".to_string(), // Would need to fetch full issue details
-                status: linked_issue.status.clone(),
-                priority: None,
-                assignee: None,
-                project_key: "Unknown".to_string(), // Would need to extract from key
-                depth: 1,
+        // Process each issue in the graph
+        for (issue_key, issue_rels) in &graph.issues {
+            // Fetch full issue details for this node
+            let issue_details = match self
+                .jira_client
+                .get_issue_details(issue_key, false, false, false)
+                .await
+            {
+                Ok(details) => details,
+                Err(e) => {
+                    debug!("Failed to fetch details for {}: {}", issue_key, e);
+                    inaccessible_issues.push(issue_key.clone());
+                    continue;
+                }
             };
-            nodes.push(linked_node);
 
-            // Add relationship
-            let relationship = IssueRelationship {
-                from_issue: root_issue.issue_info.key.clone(),
-                to_issue: linked_issue.key.clone(),
-                relationship_type: linked_issue.link_type.clone(),
-                direction: linked_issue.direction.clone(),
-                description: Some(format!(
-                    "{} {}",
-                    if linked_issue.direction == "outward" {
-                        "This issue"
-                    } else {
-                        "Linked issue"
-                    },
-                    linked_issue.link_type.to_lowercase()
-                )),
+            // Calculate depth from root (simplified - assumes breadth-first traversal)
+            let depth = if issue_key == &params.root_issue_key {
+                0
+            } else {
+                graph
+                    .get_path(&params.root_issue_key, issue_key)
+                    .map(|path| (path.len() - 1) as u32)
+                    .unwrap_or(params.max_depth)
             };
-            relationships.push(relationship);
 
-            // Update statistics
-            *relationships_by_type
-                .entry(linked_issue.link_type.clone())
-                .or_insert(0) += 1;
+            // Create issue node
+            let node = IssueNode {
+                key: issue_details.issue_info.key.clone(),
+                summary: issue_details.issue_info.summary.clone(),
+                issue_type: issue_details.issue_info.issue_type.clone(),
+                status: issue_details.issue_info.status.clone(),
+                priority: issue_details.issue_info.priority.clone(),
+                assignee: issue_details.issue_info.assignee.clone(),
+                project_key: issue_details.issue_info.project_key.clone(),
+                depth,
+            };
+
+            nodes.push(node);
+            *issues_by_depth.entry(depth).or_insert(0) += 1;
+
+            // Process relationships
+            self.add_relationships(
+                issue_key,
+                issue_rels,
+                &params,
+                &mut relationships,
+                &mut relationships_by_type,
+            );
         }
-
-        // Update depth statistics
-        *issues_by_depth.entry(1).or_insert(0) += root_issue.linked_issues.len();
 
         let summary = RelationshipSummary {
             total_issues: nodes.len(),
@@ -267,11 +329,6 @@ impl IssueRelationshipsTool {
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 
-        info!(
-            "Relationship extraction completed in {}ms: {} issues, {} relationships",
-            execution_time, summary.total_issues, summary.total_relationships
-        );
-
         Ok(IssueRelationshipsResult {
             root_issue: params.root_issue_key,
             max_depth: params.max_depth,
@@ -280,6 +337,136 @@ impl IssueRelationshipsTool {
             summary,
             execution_time_ms: execution_time,
         })
+    }
+
+    /// Add relationships from gouqi's IssueRelationships to our format
+    fn add_relationships(
+        &self,
+        from_issue: &str,
+        issue_rels: &gouqi::relationships::IssueRelationships,
+        params: &IssueRelationshipsParams,
+        relationships: &mut Vec<IssueRelationship>,
+        relationships_by_type: &mut std::collections::HashMap<String, usize>,
+    ) {
+        // Blocks relationships
+        if params.include_blocks {
+            for to_issue in &issue_rels.blocks {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: to_issue.clone(),
+                    relationship_type: "blocks".to_string(),
+                    direction: "outward".to_string(),
+                    description: Some(format!("{} blocks {}", from_issue, to_issue)),
+                });
+                *relationships_by_type
+                    .entry("blocks".to_string())
+                    .or_insert(0) += 1;
+            }
+
+            for to_issue in &issue_rels.blocked_by {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: to_issue.clone(),
+                    relationship_type: "blocked_by".to_string(),
+                    direction: "inward".to_string(),
+                    description: Some(format!("{} is blocked by {}", from_issue, to_issue)),
+                });
+                *relationships_by_type
+                    .entry("blocked_by".to_string())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        // Relates to relationships
+        if params.include_relates {
+            for to_issue in &issue_rels.relates_to {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: to_issue.clone(),
+                    relationship_type: "relates_to".to_string(),
+                    direction: "outward".to_string(),
+                    description: Some(format!("{} relates to {}", from_issue, to_issue)),
+                });
+                *relationships_by_type
+                    .entry("relates_to".to_string())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        // Duplicate relationships
+        if params.include_duplicates {
+            for to_issue in &issue_rels.duplicates {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: to_issue.clone(),
+                    relationship_type: "duplicates".to_string(),
+                    direction: "outward".to_string(),
+                    description: Some(format!("{} duplicates {}", from_issue, to_issue)),
+                });
+                *relationships_by_type
+                    .entry("duplicates".to_string())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        // Parent-child (subtask) relationships
+        if params.include_subtasks {
+            if let Some(parent) = &issue_rels.parent {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: parent.clone(),
+                    relationship_type: "parent".to_string(),
+                    direction: "inward".to_string(),
+                    description: Some(format!("{} is subtask of {}", from_issue, parent)),
+                });
+                *relationships_by_type
+                    .entry("parent".to_string())
+                    .or_insert(0) += 1;
+            }
+
+            for child in &issue_rels.children {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: child.clone(),
+                    relationship_type: "subtask".to_string(),
+                    direction: "outward".to_string(),
+                    description: Some(format!("{} has subtask {}", from_issue, child)),
+                });
+                *relationships_by_type
+                    .entry("subtask".to_string())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        // Epic relationships
+        if params.include_epic_links {
+            if let Some(epic) = &issue_rels.epic {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: epic.clone(),
+                    relationship_type: "epic".to_string(),
+                    direction: "inward".to_string(),
+                    description: Some(format!("{} is in epic {}", from_issue, epic)),
+                });
+                *relationships_by_type.entry("epic".to_string()).or_insert(0) += 1;
+            }
+        }
+
+        // Custom relationships
+        for (custom_type, targets) in &issue_rels.custom {
+            for to_issue in targets {
+                relationships.push(IssueRelationship {
+                    from_issue: from_issue.to_string(),
+                    to_issue: to_issue.clone(),
+                    relationship_type: custom_type.clone(),
+                    direction: "outward".to_string(),
+                    description: Some(format!("{} {} {}", from_issue, custom_type, to_issue)),
+                });
+                *relationships_by_type
+                    .entry(custom_type.clone())
+                    .or_insert(0) += 1;
+            }
+        }
     }
 
     /// Validate issue key format
