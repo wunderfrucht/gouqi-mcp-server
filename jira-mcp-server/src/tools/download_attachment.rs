@@ -15,6 +15,7 @@ use tracing::{info, instrument, warn};
 
 /// Parameters for the download_attachment tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DownloadAttachmentParams {
     /// Attachment ID (required)
     /// This can be obtained from the list_issue_attachments tool

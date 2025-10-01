@@ -14,6 +14,7 @@ use tracing::{info, instrument, warn};
 
 /// Parameters for the list_issue_attachments tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ListAttachmentsParams {
     /// JIRA issue key (required)
     /// Examples: "PROJ-123", "KEY-456"

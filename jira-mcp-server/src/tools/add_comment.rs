@@ -14,6 +14,7 @@ use tracing::{info, instrument};
 
 /// Parameters for the add_comment tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AddCommentParams {
     /// JIRA issue key (required)
     /// Examples: "PROJ-123", "KEY-456"

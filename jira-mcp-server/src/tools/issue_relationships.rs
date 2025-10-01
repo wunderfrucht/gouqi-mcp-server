@@ -16,6 +16,7 @@ use tracing::{info, instrument};
 
 /// Parameters for extracting issue relationship graphs
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct IssueRelationshipsParams {
     /// The root issue key to start relationship extraction from (e.g., "PROJ-123")
     pub root_issue_key: String,

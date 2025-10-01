@@ -15,6 +15,7 @@ use tracing::{info, instrument, warn};
 
 /// Parameters for the search_issues tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SearchIssuesParams {
     /// Natural language search text (optional)
     pub query_text: Option<String>,

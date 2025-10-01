@@ -14,6 +14,7 @@ use tracing::{info, instrument, warn};
 
 /// Parameters for the get_issue_details tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GetIssueDetailsParams {
     /// JIRA issue key (required)
     /// Examples: "PROJ-123", "KEY-456"
