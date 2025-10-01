@@ -40,7 +40,7 @@ function getPlatformPackageName() {
       throw new Error(`Unsupported architecture: ${arch}`);
   }
 
-  return `@yourusername/template-mcp-server-${platformName}-${archName}`;
+  return `@wunderfrucht/jira-mcp-server-${platformName}-${archName}`;
 }
 
 /**
@@ -48,7 +48,7 @@ function getPlatformPackageName() {
  */
 function getBinaryPath() {
   const platform = os.platform();
-  const binaryName = platform === "win32" ? "template-mcp-server.exe" : "template-mcp-server";
+  const binaryName = platform === "win32" ? "jira-mcp-server.exe" : "jira-mcp-server";
 
   try {
     // Try to get the binary from the platform package
@@ -71,7 +71,7 @@ function getPlatformInfo() {
     arch: os.arch(),
     platformPackage: getPlatformPackageName(),
     binaryPath: getBinaryPath(),
-    binaryName: os.platform() === "win32" ? "template-mcp-server.exe" : "template-mcp-server"
+    binaryName: os.platform() === "win32" ? "jira-mcp-server.exe" : "jira-mcp-server"
   };
 }
 

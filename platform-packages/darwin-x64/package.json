@@ -1,16 +1,16 @@
 {
-  "name": "@yourusername/template-mcp-server-darwin-x64",
-  "version": "0.1.0",
-  "description": "Template MCP Server binary for macOS x64",
+  "name": "@wunderfrucht/jira-mcp-server-darwin-x64",
+  "version": "0.2.0",
+  "description": "JIRA MCP Server binary for macOS x64",
   "main": "index.js",
   "os": ["darwin"],
   "cpu": ["x64"],
-  "keywords": ["mcp", "template", "binary", "macos", "x64"],
-  "author": "Your Name <your.email@example.com>",
+  "keywords": ["mcp", "jira", "binary", "macos", "x64"],
+  "author": "JIRA MCP Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/template-mcp-server.git"
+    "url": "https://github.com/wunderfrucht/gouqi-mcp-server.git"
   },
   "publishConfig": {
     "access": "public"

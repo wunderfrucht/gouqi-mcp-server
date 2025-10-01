@@ -3,4 +3,4 @@
 const path = require("path");
 
 // Export the binary path for this platform
-module.exports = path.join(__dirname, "template-mcp-server.exe");
+module.exports = path.join(__dirname, "jira-mcp-server.exe");

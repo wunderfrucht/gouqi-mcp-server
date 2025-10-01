@@ -1,10 +1,10 @@
 {
-  "name": "@yourusername/template-mcp-server",
-  "version": "0.1.0",
-  "description": "Template MCP Server - A Model Context Protocol server template using PulseEngine MCP framework",
+  "name": "@wunderfrucht/jira-mcp-server",
+  "version": "0.2.0",
+  "description": "JIRA MCP Server - AI-friendly JIRA integration via Model Context Protocol",
   "main": "index.js",
   "bin": {
-    "template-mcp-server": "./run.js"
+    "jira-mcp-server": "./run.js"
   },
   "scripts": {
     "postinstall": "node install.js",
@@ -13,26 +13,26 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "template",
+    "jira",
     "server",
     "rust",
     "cli"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "JIRA MCP Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/template-mcp-server.git"
+    "url": "https://github.com/wunderfrucht/gouqi-mcp-server.git"
   },
-  "homepage": "https://github.com/yourusername/template-mcp-server",
+  "homepage": "https://github.com/wunderfrucht/gouqi-mcp-server",
   "bugs": {
-    "url": "https://github.com/yourusername/template-mcp-server/issues"
+    "url": "https://github.com/wunderfrucht/gouqi-mcp-server/issues"
   },
   "optionalDependencies": {
-    "@yourusername/template-mcp-server-darwin-arm64": "0.1.0",
-    "@yourusername/template-mcp-server-darwin-x64": "0.1.0",
-    "@yourusername/template-mcp-server-linux-x64": "0.1.0",
-    "@yourusername/template-mcp-server-win32-x64": "0.1.0"
+    "@wunderfrucht/jira-mcp-server-darwin-arm64": "0.2.0",
+    "@wunderfrucht/jira-mcp-server-darwin-x64": "0.2.0",
+    "@wunderfrucht/jira-mcp-server-linux-x64": "0.2.0",
+    "@wunderfrucht/jira-mcp-server-win32-x64": "0.2.0"
   },
   "engines": {
     "node": ">=14"

@@ -47,7 +47,7 @@ function getPlatform() {
   } else if (arch === "arm64") {
     archSuffix = "aarch64";
   } else {
-    throw new Error(`Unsupported architecture: ${arch}. Supported architectures: x64 (Intel), arm64 (Apple Silicon). Please install from source: cargo install --git https://github.com/yourusername/template-mcp-server.git template-mcp-server`);
+    throw new Error(`Unsupported architecture: ${arch}. Supported architectures: x64 (Intel), arm64 (Apple Silicon). Please install from source: cargo install --git https://github.com/wunderfrucht/gouqi-mcp-server.git jira-mcp-server`);
   }
 
   return `${archSuffix}-${platform}`;
@@ -55,7 +55,7 @@ function getPlatform() {
 
 function getBinaryName() {
   const platform = os.type();
-  return platform === "Windows_NT" ? "template-mcp-server.exe" : "template-mcp-server";
+  return platform === "Windows_NT" ? "jira-mcp-server.exe" : "jira-mcp-server";
 }
 
 function getDownloadUrl() {
@@ -66,7 +66,7 @@ function getDownloadUrl() {
   const archiveExtension = os.type() === "Windows_NT" ? "zip" : "tar.gz";
 
   // Use GitHub releases for binary distribution
-  return `https://github.com/yourusername/template-mcp-server/releases/download/v${version}/template-mcp-server-v${version}-${platform}.${archiveExtension}`;
+  return `https://github.com/wunderfrucht/gouqi-mcp-server/releases/download/v${version}/jira-mcp-server-v${version}-${platform}.${archiveExtension}`;
 }
 
 function downloadFile(url, destination) {
@@ -121,7 +121,7 @@ async function installBinary() {
 
   // Download archive
   const archiveExtension = os.type() === "Windows_NT" ? "zip" : "tar.gz";
-  const archivePath = path.join(binDir, `template-mcp-server.${archiveExtension}`);
+  const archivePath = path.join(binDir, `jira-mcp-server.${archiveExtension}`);
 
   console.log("📥 Downloading binary...");
   try {
@@ -161,17 +161,17 @@ async function installBinary() {
 
 // Run installation
 installBinary().catch(err => {
-  console.error("❌ Failed to install template-mcp-server binary:", err.message);
+  console.error("❌ Failed to install jira-mcp-server binary:", err.message);
 
   // Provide helpful error message
   console.error("\n📋 Installation failed. You can:");
   console.error("1. Install Rust and build from source:");
-  console.error("   git clone https://github.com/yourusername/template-mcp-server.git");
-  console.error("   cd template-mcp-server");
-  console.error("   cargo install --path template-mcp-server");
+  console.error("   git clone https://github.com/wunderfrucht/gouqi-mcp-server.git");
+  console.error("   cd gouqi-mcp-server");
+  console.error("   cargo install --path jira-mcp-server");
   console.error("");
   console.error("2. Download binary manually from:");
-  console.error("   https://github.com/yourusername/template-mcp-server/releases");
+  console.error("   https://github.com/wunderfrucht/gouqi-mcp-server/releases");
 
   process.exit(1);
 });

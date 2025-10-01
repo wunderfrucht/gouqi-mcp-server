@@ -1,16 +1,16 @@
 {
-  "name": "@yourusername/template-mcp-server-win32-x64",
-  "version": "0.1.0",
-  "description": "Template MCP Server binary for Windows x64",
+  "name": "@wunderfrucht/jira-mcp-server-win32-x64",
+  "version": "0.2.0",
+  "description": "JIRA MCP Server binary for Windows x64",
   "main": "index.js",
   "os": ["win32"],
   "cpu": ["x64"],
-  "keywords": ["mcp", "template", "binary", "windows", "x64"],
-  "author": "Your Name <your.email@example.com>",
+  "keywords": ["mcp", "jira", "binary", "windows", "x64"],
+  "author": "JIRA MCP Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/template-mcp-server.git"
+    "url": "https://github.com/wunderfrucht/gouqi-mcp-server.git"
   },
   "publishConfig": {
     "access": "public"

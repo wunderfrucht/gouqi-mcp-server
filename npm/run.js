@@ -5,7 +5,7 @@ const { getBinaryPath } = require("./index.js");
 const fs = require("fs");
 
 /**
- * Runs the template-mcp-server binary with the provided arguments
+ * Runs the jira-mcp-server binary with the provided arguments
  */
 function runServer() {
   try {
@@ -21,7 +21,7 @@ function runServer() {
       console.error("3. Your platform is not supported");
       console.error("");
       console.error("Try running: npm install --force");
-      console.error("Or install from source: cargo install --git https://github.com/yourusername/template-mcp-server.git template-mcp-server");
+      console.error("Or install from source: cargo install --git https://github.com/wunderfrucht/gouqi-mcp-server.git jira-mcp-server");
       process.exit(1);
     }
 
@@ -33,7 +33,7 @@ function runServer() {
 
     // Handle child process events
     child.on("error", (err) => {
-      console.error("❌ Failed to start template-mcp-server:", err.message);
+      console.error("❌ Failed to start jira-mcp-server:", err.message);
       process.exit(1);
     });
 
@@ -52,7 +52,7 @@ function runServer() {
     process.on("SIGTERM", () => child.kill("SIGTERM"));
 
   } catch (err) {
-    console.error("❌ Error starting template-mcp-server:", err.message);
+    console.error("❌ Error starting jira-mcp-server:", err.message);
     process.exit(1);
   }
 }
