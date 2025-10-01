@@ -15,6 +15,7 @@ use tracing::{info, instrument, warn};
 
 /// Parameters for the get_user_issues tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GetUserIssuesParams {
     /// Username, account ID, or special reference (optional)
     /// Examples: "me", "current_user", "john.doe", "account123", or omit for current user
