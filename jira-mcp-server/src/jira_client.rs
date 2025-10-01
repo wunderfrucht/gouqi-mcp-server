@@ -360,13 +360,30 @@ impl JiraClient {
         // Extract linked issues
         let linked_issues = self.extract_linked_issues(&issue);
 
+        // Extract parent issue if this is a subtask
+        let parent = issue
+            .parent()
+            .map(|parent_issue| self.convert_issue_info(&parent_issue));
+
+        // Extract subtasks
+        let subtasks = issue
+            .field::<Vec<Issue>>("subtasks")
+            .and_then(|result| result.ok())
+            .map(|subtask_issues| {
+                subtask_issues
+                    .iter()
+                    .map(|subtask| self.convert_issue_info(subtask))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(IssueDetails {
             issue_info,
             comments,
             attachments,
             history,
-            subtasks: Vec::new(), // TODO: Extract from issuelinks where link type is subtask
-            parent: None,         // TODO: Extract from parent field
+            subtasks,
+            parent,
             linked_issues,
         })
     }
