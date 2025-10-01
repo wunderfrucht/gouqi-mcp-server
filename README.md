@@ -145,7 +145,7 @@ JIRA_TOKEN="your_token"
 
 # For Basic Auth
 JIRA_USERNAME="your_username"
-JIRA_PASSWORD="your_password"
+JIRA_PASSWORD="your_password"  # pragma: allowlist secret
 
 # Optional
 JIRA_CACHE_TTL="300"
