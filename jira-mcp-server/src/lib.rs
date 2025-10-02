@@ -23,7 +23,8 @@ use crate::tools::{
     GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool,
     IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
     ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, SearchIssuesParams,
-    SearchIssuesResult, SearchIssuesTool,
+    SearchIssuesResult, SearchIssuesTool, UpdateDescription, UpdateDescriptionParams,
+    UpdateDescriptionResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -59,7 +60,7 @@ pub struct JiraServerStatus {
 /// Uses the #[mcp_server] macro for automatic MCP infrastructure generation.
 #[mcp_server(
     name = "JIRA MCP Server",
-    version = "0.1.0",
+    version = "0.4.0",
     description = "AI-friendly JIRA integration server with semantic search, commenting, and relationship analysis capabilities",
     auth = "disabled" // Start with disabled for development, can be changed to "file" for production
 )]
@@ -85,6 +86,7 @@ pub struct JiraMcpServer {
     download_attachment_tool: Arc<DownloadAttachmentTool>,
     add_comment_tool: Arc<AddCommentTool>,
     issue_relationships_tool: Arc<IssueRelationshipsTool>,
+    update_description_tool: Arc<UpdateDescription>,
 }
 
 impl Default for JiraMcpServer {
@@ -176,6 +178,8 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let update_description_tool = Arc::new(UpdateDescription::new(Arc::clone(&jira_client)));
+
         info!("JIRA MCP Server initialized successfully");
 
         Ok(Self {
@@ -190,6 +194,7 @@ impl JiraMcpServer {
             download_attachment_tool,
             add_comment_tool,
             issue_relationships_tool,
+            update_description_tool,
         })
     }
 
@@ -255,6 +260,8 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let update_description_tool = Arc::new(UpdateDescription::new(Arc::clone(&jira_client)));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -267,6 +274,7 @@ impl JiraMcpServer {
             download_attachment_tool,
             add_comment_tool,
             issue_relationships_tool,
+            update_description_tool,
         })
     }
 
@@ -372,13 +380,13 @@ impl JiraMcpServer {
 
         Ok(JiraServerStatus {
             server_name: "JIRA MCP Server".to_string(),
-            version: "0.1.0".to_string(),
+            version: "0.4.0".to_string(),
             uptime_seconds: self.get_uptime_seconds(),
             jira_url: self.config.jira_url.clone(),
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 10, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, get_issue_relationships
+            tools_count: 11, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships
         })
     }
 
@@ -504,6 +512,31 @@ impl JiraMcpServer {
             error!("add_comment failed: {}", e);
             anyhow::anyhow!(e)
         })
+    }
+
+    /// Update the description of a JIRA issue
+    ///
+    /// Updates the description field of a JIRA issue. Supports three modes:
+    /// - append (default): Adds content to the end of the existing description
+    /// - prepend: Adds content to the beginning of the existing description
+    /// - replace: Completely replaces the description with new content
+    ///
+    /// # Examples
+    /// - Append to description: `{"issue_key": "PROJ-123", "content": "Additional context: This fixes the login issue"}`
+    /// - Replace description: `{"issue_key": "PROJ-123", "content": "New complete description", "mode": "replace"}`
+    /// - Prepend to description: `{"issue_key": "PROJ-123", "content": "⚠️ URGENT: ", "mode": "prepend"}`
+    #[instrument(skip(self))]
+    pub async fn update_issue_description(
+        &self,
+        params: UpdateDescriptionParams,
+    ) -> anyhow::Result<UpdateDescriptionResult> {
+        self.update_description_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("update_issue_description failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Extract issue relationship graph

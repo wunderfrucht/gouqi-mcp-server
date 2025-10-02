@@ -8,6 +8,7 @@ pub mod issue_details;
 pub mod issue_relationships;
 pub mod list_attachments;
 pub mod search_issues;
+pub mod update_description;
 pub mod user_issues;
 
 pub use add_comment::*;
@@ -16,4 +17,5 @@ pub use issue_details::*;
 pub use issue_relationships::*;
 pub use list_attachments::*;
 pub use search_issues::*;
+pub use update_description::*;
 pub use user_issues::*;
