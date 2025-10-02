@@ -118,10 +118,6 @@ jobs:
             }
           ' package.json > package.json.tmp && mv package.json.tmp package.json
 
-      - name: Install dependencies
-        working-directory: npm
-        run: npm install
-
       - name: Publish to NPM
         working-directory: npm
         run: npm publish --access public
