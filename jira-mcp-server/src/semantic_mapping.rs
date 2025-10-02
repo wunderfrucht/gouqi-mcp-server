@@ -171,6 +171,8 @@ impl SemanticMapper {
         status: Option<&[String]>,
         created_after: Option<&str>,
         labels: Option<&[String]>,
+        parent_filter: Option<&str>,
+        epic_filter: Option<&str>,
     ) -> JiraMcpResult<JqlQuery> {
         let mut jql_parts = Vec::new();
         let mut complexity = QueryComplexity::Simple;
@@ -255,6 +257,26 @@ impl SemanticMapper {
             }
         }
 
+        // Parent filter
+        if let Some(parent) = parent_filter {
+            let parent_clause = match parent.to_lowercase().as_str() {
+                "none" => "parent is EMPTY".to_string(),
+                "any" => "parent is not EMPTY".to_string(),
+                issue_key => format!("parent = \"{}\"", issue_key),
+            };
+            jql_parts.push(parent_clause);
+        }
+
+        // Epic link filter
+        if let Some(epic) = epic_filter {
+            let epic_clause = match epic.to_lowercase().as_str() {
+                "none" => "\"Epic Link\" is EMPTY".to_string(),
+                "any" => "\"Epic Link\" is not EMPTY".to_string(),
+                epic_key => format!("\"Epic Link\" = \"{}\"", epic_key),
+            };
+            jql_parts.push(epic_clause);
+        }
+
         // Determine complexity
         if jql_parts.len() > 3 {
             complexity = QueryComplexity::Complex;
@@ -306,6 +328,8 @@ impl SemanticMapper {
             Some(&user_account_id),
             project_key,
             status_filter,
+            None,
+            None,
             None,
             None,
         )
@@ -480,6 +504,8 @@ mod tests {
                 None,
                 Some("TEST"),
                 Some(&["open".to_string()]),
+                None,
+                None,
                 None,
                 None,
             )

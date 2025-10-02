@@ -46,6 +46,14 @@ pub struct SearchIssuesParams {
     /// Label filters (optional)
     pub labels: Option<Vec<String>>,
 
+    /// Parent issue filter (optional)
+    /// Examples: "none" (no parent), "any" (has parent), "PROJ-123" (specific parent issue key)
+    pub parent_filter: Option<String>,
+
+    /// Epic link filter (optional)
+    /// Examples: "none" (not in epic), "any" (in an epic), "PROJ-456" (specific epic key)
+    pub epic_filter: Option<String>,
+
     /// Maximum results to return (optional, default: 50, max: 200)
     pub limit: Option<u32>,
 
@@ -183,6 +191,8 @@ impl SearchIssuesTool {
             status,
             params.created_after.as_deref(),
             labels,
+            params.parent_filter.as_deref(),
+            params.epic_filter.as_deref(),
         )?;
 
         // Apply pagination
@@ -372,6 +382,8 @@ mod tests {
             status: Some(vec!["open".to_string(), "in_progress".to_string()]),
             created_after: Some("7 days ago".to_string()),
             labels: Some(vec!["urgent".to_string()]),
+            parent_filter: None,
+            epic_filter: None,
             limit: Some(50),
             start_at: Some(0),
         }
