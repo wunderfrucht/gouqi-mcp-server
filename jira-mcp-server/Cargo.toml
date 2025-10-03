@@ -37,4 +37,4 @@ keywords = ["mcp", "model-context-protocol", "jira", "search"]
 license = "MIT"
 name = "jira-mcp-server"
 repository = "https://github.com/yourusername/jira-mcp-server"
-version = "0.4.0"
+version = "0.5.0"

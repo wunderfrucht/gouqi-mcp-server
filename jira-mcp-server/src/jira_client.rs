@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// JIRA client wrapper that provides MCP-friendly operations
 #[derive(Debug, Clone)]
@@ -315,7 +315,42 @@ impl JiraClient {
 
         // Extract comments from issue if requested
         let comments = if include_comments {
-            issue.comments().map(|comments_obj| {
+            // Debug: Log available fields in the issue
+            debug!(
+                "Issue fields available: {:?}",
+                issue.fields.keys().collect::<Vec<_>>()
+            );
+
+            // Debug: Try to access the comment field directly to see what's happening
+            match issue.field::<serde_json::Value>("comment") {
+                Some(Ok(value)) => {
+                    debug!("Comment field exists in response");
+                    debug!(
+                        "Comment field value: {}",
+                        serde_json::to_string_pretty(&value)
+                            .unwrap_or_else(|_| "unable to serialize".to_string())
+                    );
+                }
+                Some(Err(e)) => {
+                    warn!("Comment field deserialization to Value failed: {}", e);
+                }
+                None => {
+                    warn!("Comment field not present in issue response - expand parameter may not have worked");
+                }
+            }
+
+            // Try to deserialize as Comments struct
+            let result = issue.comments();
+            if result.is_none() {
+                warn!("issue.comments() returned None - Comments struct deserialization failed");
+            } else {
+                debug!(
+                    "Successfully deserialized Comments struct with {} comments",
+                    result.as_ref().map(|c| c.comments.len()).unwrap_or(0)
+                );
+            }
+
+            result.map(|comments_obj| {
                 comments_obj
                     .comments
                     .iter()
