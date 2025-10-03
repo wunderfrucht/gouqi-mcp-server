@@ -222,34 +222,40 @@ impl IssueRelationshipsTool {
 
     /// Build GraphOptions from parameters
     fn build_graph_options(&self, params: &IssueRelationshipsParams) -> GraphOptions {
-        let mut include_types = Vec::new();
+        // Build exclude_types list based on parameters
+        // Since all flags default to true, we use exclude_types instead of include_types
+        // This way we don't accidentally filter out subtasks/parents/epic links
+        let mut exclude_types = Vec::new();
 
-        // Build include_types based on parameter flags
-        if params.include_blocks {
-            include_types.push("Blocks".to_string());
-            include_types.push("blocks".to_string());
+        if !params.include_blocks {
+            exclude_types.push("Blocks".to_string());
+            exclude_types.push("blocks".to_string());
+            exclude_types.push("is blocked by".to_string());
         }
 
-        if params.include_relates {
-            include_types.push("Relates".to_string());
-            include_types.push("relates to".to_string());
+        if !params.include_relates {
+            exclude_types.push("Relates".to_string());
+            exclude_types.push("relates to".to_string());
         }
 
-        if params.include_duplicates {
-            include_types.push("Duplicate".to_string());
-            include_types.push("Duplicates".to_string());
+        if !params.include_duplicates {
+            exclude_types.push("Duplicate".to_string());
+            exclude_types.push("Duplicates".to_string());
+            exclude_types.push("is duplicated by".to_string());
         }
 
-        // Note: subtasks and epic links are handled separately in gouqi's graph structure
-        // They're not filtered via include_types
+        // Note: subtasks, epic links, and parent links are part of JIRA's hierarchy
+        // and will be included automatically unless explicitly excluded
+        // The include_subtasks and include_epic_links params need different handling
+        // as they're not standard "link types" in JIRA
 
         GraphOptions {
-            include_types: if include_types.is_empty() {
-                None // Include all types if none specified
+            include_types: None, // Don't filter - include all types including subtasks/parents
+            exclude_types: if exclude_types.is_empty() {
+                None
             } else {
-                Some(include_types)
+                Some(exclude_types)
             },
-            exclude_types: None,
             include_custom: true, // Include custom link types
             bidirectional: true,  // Include both inward and outward links
         }
