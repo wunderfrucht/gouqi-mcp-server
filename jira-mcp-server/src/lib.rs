@@ -19,12 +19,13 @@ use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
     AddCommentParams, AddCommentResult, AddCommentTool, DownloadAttachmentParams,
-    DownloadAttachmentResult, DownloadAttachmentTool, GetIssueDetailsParams, GetIssueDetailsResult,
-    GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool,
-    IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
+    DownloadAttachmentResult, DownloadAttachmentTool, GetAvailableTransitionsParams,
+    GetAvailableTransitionsResult, GetAvailableTransitionsTool, GetIssueDetailsParams,
+    GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult,
+    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
     ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, SearchIssuesParams,
-    SearchIssuesResult, SearchIssuesTool, UpdateDescription, UpdateDescriptionParams,
-    UpdateDescriptionResult,
+    SearchIssuesResult, SearchIssuesTool, TransitionIssueParams, TransitionIssueResult,
+    TransitionIssueTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -60,7 +61,7 @@ pub struct JiraServerStatus {
 /// Uses the #[mcp_server] macro for automatic MCP infrastructure generation.
 #[mcp_server(
     name = "JIRA MCP Server",
-    version = "0.4.0",
+    version = "0.5.0",
     description = "AI-friendly JIRA integration server with semantic search, commenting, and relationship analysis capabilities",
     auth = "disabled" // Start with disabled for development, can be changed to "file" for production
 )]
@@ -87,6 +88,8 @@ pub struct JiraMcpServer {
     add_comment_tool: Arc<AddCommentTool>,
     issue_relationships_tool: Arc<IssueRelationshipsTool>,
     update_description_tool: Arc<UpdateDescription>,
+    get_available_transitions_tool: Arc<GetAvailableTransitionsTool>,
+    transition_issue_tool: Arc<TransitionIssueTool>,
 }
 
 impl Default for JiraMcpServer {
@@ -180,6 +183,11 @@ impl JiraMcpServer {
 
         let update_description_tool = Arc::new(UpdateDescription::new(Arc::clone(&jira_client)));
 
+        let get_available_transitions_tool =
+            Arc::new(GetAvailableTransitionsTool::new(Arc::clone(&jira_client)));
+
+        let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
+
         info!("JIRA MCP Server initialized successfully");
 
         Ok(Self {
@@ -195,6 +203,8 @@ impl JiraMcpServer {
             add_comment_tool,
             issue_relationships_tool,
             update_description_tool,
+            get_available_transitions_tool,
+            transition_issue_tool,
         })
     }
 
@@ -262,6 +272,11 @@ impl JiraMcpServer {
 
         let update_description_tool = Arc::new(UpdateDescription::new(Arc::clone(&jira_client)));
 
+        let get_available_transitions_tool =
+            Arc::new(GetAvailableTransitionsTool::new(Arc::clone(&jira_client)));
+
+        let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -275,6 +290,8 @@ impl JiraMcpServer {
             add_comment_tool,
             issue_relationships_tool,
             update_description_tool,
+            get_available_transitions_tool,
+            transition_issue_tool,
         })
     }
 
@@ -559,6 +576,53 @@ impl JiraMcpServer {
             .await
             .map_err(|e| {
                 error!("get_issue_relationships failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Get available transitions for an issue
+    ///
+    /// Returns the list of workflow transitions available for a specific JIRA issue.
+    /// Different issues may have different available transitions depending on their
+    /// current status, workflow, and issue type.
+    ///
+    /// # Examples
+    /// - Get available transitions: `{"issue_key": "PROJ-123"}`
+    #[instrument(skip(self))]
+    pub async fn get_available_transitions(
+        &self,
+        params: GetAvailableTransitionsParams,
+    ) -> anyhow::Result<GetAvailableTransitionsResult> {
+        self.get_available_transitions_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("get_available_transitions failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Transition an issue to a new status
+    ///
+    /// Executes a workflow transition on a JIRA issue to change its status.
+    /// You can specify the transition either by ID or by name. Optionally add
+    /// a comment and/or set a resolution when transitioning.
+    ///
+    /// # Examples
+    /// - Transition by name: `{"issue_key": "PROJ-123", "transition_name": "Start Progress"}`
+    /// - Transition by ID: `{"issue_key": "PROJ-123", "transition_id": "11"}`
+    /// - Transition with comment: `{"issue_key": "PROJ-123", "transition_name": "Done", "comment": "Work completed"}`
+    /// - Transition with resolution: `{"issue_key": "PROJ-123", "transition_name": "Done", "resolution": "Fixed"}`
+    #[instrument(skip(self))]
+    pub async fn transition_issue(
+        &self,
+        params: TransitionIssueParams,
+    ) -> anyhow::Result<TransitionIssueResult> {
+        self.transition_issue_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("transition_issue failed: {}", e);
                 anyhow::anyhow!(e)
             })
     }
