@@ -122,7 +122,7 @@ impl UpdateDescription {
         self.jira_client
             .client
             .issues()
-            .edit(&params.issue_key, edit_issue)
+            .update(&params.issue_key, edit_issue)
             .await?;
 
         info!(
