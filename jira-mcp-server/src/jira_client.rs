@@ -7,7 +7,7 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use gouqi::issues::AddComment;
 use gouqi::r#async::Jira;
-use gouqi::{Comment, Issue, SearchOptions, Session};
+use gouqi::{Comment, Issue, SearchOptions, Session, Worklog, WorklogInput, WorklogList};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -71,6 +71,19 @@ pub struct CommentInfo {
     pub body: String,
     pub created: String,
     pub updated: String,
+}
+
+/// Worklog information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorklogInfo {
+    pub id: String,
+    pub author: String,
+    pub comment: Option<String>,
+    pub created: String,
+    pub updated: String,
+    pub started: String,
+    pub time_spent: Option<String>,
+    pub time_spent_seconds: Option<u64>,
 }
 
 /// Attachment information
@@ -596,9 +609,7 @@ impl JiraClient {
         let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
 
         // Create the comment request
-        let add_comment = AddComment {
-            body: comment_body.to_string(),
-        };
+        let add_comment = AddComment::new(comment_body);
 
         // Call the real gouqi comment API
         let comment = timeout(timeout_duration, async {
@@ -623,6 +634,119 @@ impl JiraClient {
 
         info!("Successfully added comment to issue {}", issue_key);
         Ok(self.convert_comment_info(&comment))
+    }
+
+    /// Add a worklog entry to an issue
+    #[instrument(skip(self))]
+    pub async fn add_worklog(
+        &self,
+        issue_key: &str,
+        time_spent_seconds: u64,
+        comment: Option<String>,
+        started: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> JiraMcpResult<WorklogInfo> {
+        info!(
+            "Adding worklog to issue {}: {} seconds",
+            issue_key, time_spent_seconds
+        );
+
+        let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
+
+        // Convert chrono DateTime to time OffsetDateTime if provided
+        // Note: gouqi uses the `time` crate for timestamps
+        let started_time = started.map(|dt| {
+            // Use time crate's OffsetDateTime
+            use time::OffsetDateTime;
+            OffsetDateTime::from_unix_timestamp(dt.timestamp())
+                .unwrap_or_else(|_| OffsetDateTime::now_utc())
+        });
+
+        let mut worklog = WorklogInput::new(time_spent_seconds);
+        if let Some(comment_text) = comment {
+            worklog = worklog.with_comment(comment_text);
+        }
+        if let Some(start_time) = started_time {
+            worklog = worklog.with_started(start_time);
+        }
+
+        let result = timeout(timeout_duration, async {
+            self.client.issues().add_worklog(issue_key, worklog).await
+        })
+        .await
+        .map_err(|_| {
+            JiraMcpError::network(format!("Timeout adding worklog to issue {}", issue_key))
+        })?
+        .map_err(|e| {
+            if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                JiraMcpError::not_found("issue", issue_key)
+            } else if e.to_string().contains("403") || e.to_string().contains("Forbidden") {
+                JiraMcpError::permission(format!(
+                    "Permission denied adding worklog to issue {}",
+                    issue_key
+                ))
+            } else {
+                JiraMcpError::internal(format!("Failed to add worklog: {}", e))
+            }
+        })?;
+
+        info!(
+            "Successfully added worklog to issue {}: {}",
+            issue_key, result.id
+        );
+        Ok(self.convert_worklog_info(&result))
+    }
+
+    /// Get all worklogs for an issue
+    #[instrument(skip(self))]
+    pub async fn get_worklogs(&self, issue_key: &str) -> JiraMcpResult<Vec<WorklogInfo>> {
+        info!("Getting worklogs for issue {}", issue_key);
+
+        let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
+
+        let result: WorklogList = timeout(timeout_duration, async {
+            self.client.issues().get_worklogs(issue_key).await
+        })
+        .await
+        .map_err(|_| {
+            JiraMcpError::network(format!("Timeout getting worklogs for issue {}", issue_key))
+        })?
+        .map_err(|e| {
+            if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+                JiraMcpError::not_found("issue", issue_key)
+            } else {
+                JiraMcpError::internal(format!("Failed to get worklogs: {}", e))
+            }
+        })?;
+
+        info!(
+            "Retrieved {} worklogs for issue {}",
+            result.worklogs.len(),
+            issue_key
+        );
+
+        Ok(result
+            .worklogs
+            .iter()
+            .map(|w| self.convert_worklog_info(w))
+            .collect())
+    }
+
+    /// Convert gouqi Worklog to our WorklogInfo
+    fn convert_worklog_info(&self, worklog: &Worklog) -> WorklogInfo {
+        WorklogInfo {
+            id: worklog.id.clone(),
+            author: worklog
+                .author
+                .as_ref()
+                .map(|u| u.display_name.clone())
+                .unwrap_or_else(|| "Unknown".to_string()),
+            comment: worklog.comment.clone(),
+            created: worklog.created.map(|dt| dt.to_string()).unwrap_or_default(),
+            updated: worklog.updated.map(|dt| dt.to_string()).unwrap_or_default(),
+            started: worklog.started.map(|dt| dt.to_string()).unwrap_or_default(),
+            time_spent: worklog.time_spent.clone(),
+            time_spent_seconds: worklog.time_spent_seconds,
+        }
     }
 
     /// Build a JQL query for user-assigned issues

@@ -18,14 +18,18 @@ use crate::config::JiraConfig;
 use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
-    AddCommentParams, AddCommentResult, AddCommentTool, DownloadAttachmentParams,
-    DownloadAttachmentResult, DownloadAttachmentTool, GetAvailableTransitionsParams,
-    GetAvailableTransitionsResult, GetAvailableTransitionsTool, GetIssueDetailsParams,
-    GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult,
-    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
-    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, SearchIssuesParams,
-    SearchIssuesResult, SearchIssuesTool, TransitionIssueParams, TransitionIssueResult,
-    TransitionIssueTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
+    AddCommentParams, AddCommentResult, AddCommentTool, AddTodoParams, AddTodoResult,
+    CancelTodoWorkParams, CancelTodoWorkResult, CompleteTodoWorkParams, CompleteTodoWorkResult,
+    DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
+    GetActiveWorkSessionsResult, GetAvailableTransitionsParams, GetAvailableTransitionsResult,
+    GetAvailableTransitionsTool, GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool,
+    GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool, IssueRelationshipsParams,
+    IssueRelationshipsResult, IssueRelationshipsTool, ListAttachmentsParams, ListAttachmentsResult,
+    ListAttachmentsTool, ListTodosParams, ListTodosResult, PauseTodoWorkParams,
+    PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
+    SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams, StartTodoWorkResult, TodoTracker,
+    TransitionIssueParams, TransitionIssueResult, TransitionIssueTool, UpdateDescription,
+    UpdateDescriptionParams, UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -90,6 +94,7 @@ pub struct JiraMcpServer {
     update_description_tool: Arc<UpdateDescription>,
     get_available_transitions_tool: Arc<GetAvailableTransitionsTool>,
     transition_issue_tool: Arc<TransitionIssueTool>,
+    todo_tracker: Arc<TodoTracker>,
 }
 
 impl Default for JiraMcpServer {
@@ -188,6 +193,12 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let todo_tracker = Arc::new(TodoTracker::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         info!("JIRA MCP Server initialized successfully");
 
         Ok(Self {
@@ -205,6 +216,7 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            todo_tracker,
         })
     }
 
@@ -277,6 +289,12 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let todo_tracker = Arc::new(TodoTracker::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -292,6 +310,7 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            todo_tracker,
         })
     }
 
@@ -403,7 +422,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 11, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships
+            tools_count: 22, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
         })
     }
 
@@ -623,6 +642,195 @@ impl JiraMcpServer {
             .await
             .map_err(|e| {
                 error!("transition_issue failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// List todos from an issue description
+    ///
+    /// Parses markdown-style checkboxes from an issue description and returns
+    /// them as structured todo items. Supports formats like `- [ ] todo` and `- [x] completed`.
+    /// Allows filtering by status: open, completed, or wip (work in progress).
+    ///
+    /// # Examples
+    /// - List all todos: `{"issue_key": "PROJ-123"}`
+    /// - List open todos: `{"status_filter": ["open"]}`
+    /// - List work in progress: `{"status_filter": ["wip"]}`
+    /// - List open and wip: `{"status_filter": ["open", "wip"]}`
+    #[instrument(skip(self))]
+    pub async fn list_todos(&self, params: ListTodosParams) -> anyhow::Result<ListTodosResult> {
+        self.todo_tracker.list_todos(params).await.map_err(|e| {
+            error!("list_todos failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Add a new todo to an issue description
+    ///
+    /// Adds a new markdown-style checkbox todo to an issue's description.
+    /// Automatically creates a "Todos" section if one doesn't exist, or adds
+    /// to an existing todo section.
+    ///
+    /// # Examples
+    /// - Add todo at end: `{"issue_key": "PROJ-123", "todo_text": "Review code changes"}`
+    /// - Add todo at beginning: `{"issue_key": "PROJ-123", "todo_text": "Urgent: Fix bug", "prepend": true}`
+    #[instrument(skip(self))]
+    pub async fn add_todo(&self, params: AddTodoParams) -> anyhow::Result<AddTodoResult> {
+        self.todo_tracker.add_todo(params).await.map_err(|e| {
+            error!("add_todo failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Update a todo's completion status
+    ///
+    /// Marks a todo as completed (checked) or incomplete (unchecked) in the issue description.
+    /// You can specify the todo by its ID or by its 1-based index in the list.
+    ///
+    /// # Examples
+    /// - Complete a todo: `{"issue_key": "PROJ-123", "todo_id_or_index": "1", "completed": true}`
+    /// - Reopen a todo: `{"issue_key": "PROJ-123", "todo_id_or_index": "todo-abc123", "completed": false}`
+    #[instrument(skip(self))]
+    pub async fn update_todo(&self, params: UpdateTodoParams) -> anyhow::Result<UpdateTodoResult> {
+        self.todo_tracker.update_todo(params).await.map_err(|e| {
+            error!("update_todo failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Start tracking work time on a todo
+    ///
+    /// Begins tracking time spent working on a specific todo. Creates a work session
+    /// that will be used to calculate time when you complete the work. You must
+    /// complete the work session before starting another one on the same todo.
+    ///
+    /// # Examples
+    /// - Start work on first todo: `{"issue_key": "PROJ-123", "todo_id_or_index": "1"}`
+    /// - Start work by todo ID: `{"issue_key": "PROJ-123", "todo_id_or_index": "todo-abc123"}`
+    #[instrument(skip(self))]
+    pub async fn start_todo_work(
+        &self,
+        params: StartTodoWorkParams,
+    ) -> anyhow::Result<StartTodoWorkResult> {
+        self.todo_tracker
+            .start_todo_work(params)
+            .await
+            .map_err(|e| {
+                error!("start_todo_work failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Complete work on a todo and log time spent
+    ///
+    /// Completes a work session for a todo, calculates the time spent, and logs it
+    /// as a worklog entry in JIRA. Optionally marks the todo as completed.
+    ///
+    /// IMPORTANT: For sessions spanning multiple days (>24 hours), you MUST provide
+    /// explicit time using time_spent_hours, time_spent_minutes, or time_spent_seconds.
+    /// This prevents accidentally logging extremely long sessions.
+    ///
+    /// # Examples
+    /// - Complete same-day work: `{"todo_id_or_index": "1"}`
+    /// - Multi-day work: `{"todo_id_or_index": "1", "time_spent_hours": 8.5}`
+    /// - With minutes: `{"todo_id_or_index": "1", "time_spent_minutes": 480}`
+    /// - Without marking done: `{"todo_id_or_index": "1", "time_spent_hours": 6, "mark_completed": false}`
+    /// - With comment: `{"todo_id_or_index": "1", "time_spent_hours": 7, "worklog_comment": "Completed feature implementation"}`
+    #[instrument(skip(self))]
+    pub async fn complete_todo_work(
+        &self,
+        params: CompleteTodoWorkParams,
+    ) -> anyhow::Result<CompleteTodoWorkResult> {
+        self.todo_tracker
+            .complete_todo_work(params)
+            .await
+            .map_err(|e| {
+                error!("complete_todo_work failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Set the base issue for todo operations
+    ///
+    /// Sets a default JIRA issue to use for all subsequent todo commands.
+    /// After setting a base issue, you can omit the issue_key parameter in
+    /// list_todos, add_todo, update_todo, start_todo_work, and complete_todo_work.
+    ///
+    /// # Examples
+    /// - Set base issue: `{"issue_key": "PROJ-123"}`
+    ///
+    /// Then you can use:
+    /// - `list_todos({})` instead of `list_todos({"issue_key": "PROJ-123"})`
+    /// - `add_todo({"todo_text": "New task"})` instead of providing issue_key
+    #[instrument(skip(self))]
+    pub async fn set_todo_base(
+        &self,
+        params: SetTodoBaseParams,
+    ) -> anyhow::Result<SetTodoBaseResult> {
+        self.todo_tracker.set_todo_base(params).await.map_err(|e| {
+            error!("set_todo_base failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Pause work on a todo and save progress
+    ///
+    /// Stops the active work session, calculates time spent, and logs it to JIRA.
+    /// Unlike complete_todo_work, this doesn't mark the todo as completed - perfect
+    /// for end-of-day saves or when you need to switch tasks temporarily.
+    ///
+    /// # Examples
+    /// - Pause at end of day: `{"todo_id_or_index": "1", "worklog_comment": "End of day, will continue tomorrow"}`
+    /// - Quick pause: `{"todo_id_or_index": "1"}`
+    #[instrument(skip(self))]
+    pub async fn pause_todo_work(
+        &self,
+        params: PauseTodoWorkParams,
+    ) -> anyhow::Result<PauseTodoWorkResult> {
+        self.todo_tracker
+            .pause_todo_work(params)
+            .await
+            .map_err(|e| {
+                error!("pause_todo_work failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Cancel an active work session without logging time
+    ///
+    /// Discards the current work session without creating a worklog entry.
+    /// Useful when you started tracking the wrong todo or need to abandon work.
+    ///
+    /// # Examples
+    /// - Cancel wrong session: `{"todo_id_or_index": "1"}`
+    #[instrument(skip(self))]
+    pub async fn cancel_todo_work(
+        &self,
+        params: CancelTodoWorkParams,
+    ) -> anyhow::Result<CancelTodoWorkResult> {
+        self.todo_tracker
+            .cancel_todo_work(params)
+            .await
+            .map_err(|e| {
+                error!("cancel_todo_work failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Get all active work sessions
+    ///
+    /// Returns a list of all currently active work sessions showing what's being
+    /// tracked, when it started, and how long you've been working on it.
+    ///
+    /// # Examples
+    /// - List all active sessions: `{}`
+    #[instrument(skip(self))]
+    pub async fn get_active_work_sessions(&self) -> anyhow::Result<GetActiveWorkSessionsResult> {
+        self.todo_tracker
+            .get_active_work_sessions()
+            .await
+            .map_err(|e| {
+                error!("get_active_work_sessions failed: {}", e);
                 anyhow::anyhow!(e)
             })
     }
