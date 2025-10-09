@@ -208,6 +208,43 @@ fn default_true() -> bool {
     true
 }
 
+/// Parameters for checkpointing work on a todo
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CheckpointTodoWorkParams {
+    /// The JIRA issue key (e.g., "PROJ-123")
+    /// If not provided, uses the current base issue
+    #[serde(default)]
+    pub issue_key: Option<String>,
+
+    /// The todo ID or 1-based index
+    pub todo_id_or_index: String,
+
+    /// Optional comment for the worklog entry
+    pub worklog_comment: Option<String>,
+}
+
+/// Result from checkpointing work
+#[derive(Debug, Serialize)]
+pub struct CheckpointTodoWorkResult {
+    /// The todo being worked on
+    pub todo: TodoItem,
+
+    /// Time logged in this checkpoint (seconds)
+    pub checkpoint_time_seconds: u64,
+
+    /// Total accumulated time so far (seconds)
+    pub total_accumulated_seconds: u64,
+
+    /// Time logged formatted
+    pub checkpoint_time_formatted: String,
+
+    /// The created worklog
+    pub worklog: WorklogInfo,
+
+    /// Success message
+    pub message: String,
+}
+
 /// Parameters for pausing work on a todo
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PauseTodoWorkParams {
@@ -319,12 +356,16 @@ pub struct CompleteTodoWorkResult {
 }
 
 /// Work tracking entry
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct WorkSession {
     issue_key: String,
     todo_id: String,
     todo_text: String,
     started_at: DateTime<Utc>,
+    /// Initial worklog ID created when work started (for immediate logging)
+    initial_worklog_id: Option<String>,
+    /// Total time logged in previous checkpoints (seconds)
+    accumulated_time: u64,
 }
 
 /// Todo tracker implementation
@@ -564,16 +605,9 @@ impl TodoTracker {
         let session_key = format!("{}:{}", issue_key, todo.id);
         let started_at = Utc::now();
 
-        let session = WorkSession {
-            issue_key: issue_key.clone(),
-            todo_id: todo.id.clone(),
-            todo_text: todo.text.clone(),
-            started_at,
-        };
-
-        // Store the session
+        // Check if session already exists
         {
-            let mut sessions = self.active_sessions.write().await;
+            let sessions = self.active_sessions.read().await;
             if sessions.contains_key(&session_key) {
                 warn!("Work session already active for {}:{}", issue_key, todo.id);
                 return Err(JiraMcpError::invalid_param(
@@ -581,7 +615,23 @@ impl TodoTracker {
                     "Work session already active for this todo. Complete the existing session first.".to_string(),
                 ));
             }
-            sessions.insert(session_key, session);
+        }
+
+        // Create session without initial worklog
+        // Time will be logged when completing, checkpointing, or via auto-checkpoint
+        let session = WorkSession {
+            issue_key: issue_key.clone(),
+            todo_id: todo.id.clone(),
+            todo_text: todo.text.clone(),
+            started_at,
+            initial_worklog_id: None,
+            accumulated_time: 0,
+        };
+
+        // Store the session
+        {
+            let mut sessions = self.active_sessions.write().await;
+            sessions.insert(session_key.clone(), session.clone());
         }
 
         info!("Started work tracking for todo in issue {}", issue_key);
@@ -589,7 +639,108 @@ impl TodoTracker {
         Ok(StartTodoWorkResult {
             todo,
             started_at: started_at.to_rfc3339(),
-            message: format!("Started tracking work on todo in issue {}", issue_key),
+            message: format!(
+                "Started tracking work on todo in issue {}. Time will be logged when you complete, checkpoint, or auto-checkpoint runs.",
+                issue_key
+            ),
+        })
+    }
+
+    /// Checkpoint work progress - log accumulated time but keep session active
+    #[instrument(skip(self))]
+    pub async fn checkpoint_todo_work(
+        &self,
+        params: CheckpointTodoWorkParams,
+    ) -> JiraMcpResult<CheckpointTodoWorkResult> {
+        let issue_key = self.get_issue_key(params.issue_key).await?;
+        info!(
+            "Checkpointing work on todo in issue {}: {}",
+            issue_key, params.todo_id_or_index
+        );
+
+        // Get todos
+        let issue = self
+            .jira_client
+            .get_issue_details(&issue_key, false, false, false)
+            .await?;
+        let description = issue.issue_info.description.as_deref().unwrap_or("");
+        let todos = self.parse_todos_with_status(description, &issue_key).await;
+
+        // Find the todo
+        let todo_index = Self::resolve_todo_index(&todos, &params.todo_id_or_index)?;
+        let todo = todos
+            .get(todo_index)
+            .cloned()
+            .ok_or_else(|| JiraMcpError::invalid_param("todo_id_or_index", "Todo not found"))?;
+
+        // Get the work session (don't remove it - we're checkpointing, not ending)
+        let session_key = format!("{}:{}", issue_key, todo.id);
+        let mut session = {
+            let sessions = self.active_sessions.read().await;
+            sessions.get(&session_key).cloned().ok_or_else(|| {
+                JiraMcpError::invalid_param(
+                    "todo_id_or_index",
+                    "No active work session for this todo. Start work first.",
+                )
+            })?
+        };
+
+        // Calculate time spent since last checkpoint
+        let now = Utc::now();
+        let duration = now.signed_duration_since(session.started_at);
+        let checkpoint_seconds = duration.num_seconds().max(0) as u64;
+
+        // Skip if checkpoint is less than 1 second
+        if checkpoint_seconds < 1 {
+            return Err(JiraMcpError::invalid_param(
+                "checkpoint",
+                "Cannot checkpoint - less than 1 second has elapsed since session start",
+            ));
+        }
+
+        // Add worklog entry for the checkpoint
+        let worklog_comment = params
+            .worklog_comment
+            .unwrap_or_else(|| format!("Checkpoint: work on todo: {}", todo.text));
+
+        let worklog = self
+            .jira_client
+            .add_worklog(
+                &issue_key,
+                checkpoint_seconds,
+                Some(worklog_comment),
+                Some(session.started_at),
+            )
+            .await?;
+
+        // Update session: reset start time and accumulate time
+        session.accumulated_time += checkpoint_seconds;
+        session.started_at = now;
+
+        // Update the session in memory
+        {
+            let mut sessions = self.active_sessions.write().await;
+            sessions.insert(session_key, session.clone());
+        }
+
+        let checkpoint_formatted = Self::format_duration(checkpoint_seconds);
+        let total_formatted = Self::format_duration(session.accumulated_time);
+
+        info!(
+            "Checkpointed {} for todo in issue {} (total: {})",
+            checkpoint_formatted, issue_key, total_formatted
+        );
+
+        Ok(CheckpointTodoWorkResult {
+            todo,
+            checkpoint_time_seconds: checkpoint_seconds,
+            total_accumulated_seconds: session.accumulated_time,
+            checkpoint_time_formatted: checkpoint_formatted.clone(),
+            worklog,
+            message: format!(
+                "Logged {} to issue {}. Session continues. Total time logged: {}",
+                checkpoint_formatted, issue_key, total_formatted
+            ),
         })
     }
 
@@ -632,36 +783,54 @@ impl TodoTracker {
             })?
         };
 
-        // Calculate time spent
+        // Calculate time spent since last checkpoint/start
         let now = Utc::now();
         let duration = now.signed_duration_since(session.started_at);
-        let time_spent_seconds = duration.num_seconds().max(0) as u64;
+        let current_segment_seconds = duration.num_seconds().max(0) as u64;
 
-        // Add worklog entry
-        let worklog_comment = params
-            .worklog_comment
-            .unwrap_or_else(|| format!("Partial work on todo: {}", todo.text));
+        // Add worklog entry only for time since last checkpoint (if > 0)
+        let worklog = if current_segment_seconds > 0 {
+            let worklog_comment = params
+                .worklog_comment
+                .unwrap_or_else(|| format!("Partial work on todo: {}", todo.text));
 
-        let worklog = self
-            .jira_client
-            .add_worklog(
-                &issue_key,
-                time_spent_seconds,
-                Some(worklog_comment),
-                Some(session.started_at),
-            )
-            .await?;
+            self.jira_client
+                .add_worklog(
+                    &issue_key,
+                    current_segment_seconds,
+                    Some(worklog_comment),
+                    Some(session.started_at),
+                )
+                .await?
+        } else {
+            // If no time in current segment, return a placeholder worklog
+            // (accumulated time already logged in previous checkpoints)
+            WorklogInfo {
+                id: "no-additional-time".to_string(),
+                author: "System".to_string(),
+                comment: Some("No additional time logged (session just started)".to_string()),
+                created: now.to_rfc3339(),
+                updated: now.to_rfc3339(),
+                started: session.started_at.to_rfc3339(),
+                time_spent: Some("0s".to_string()),
+                time_spent_seconds: Some(0),
+            }
+        };
 
-        let time_formatted = Self::format_duration(time_spent_seconds);
+        // Calculate total time logged including accumulated time
+        let total_time_seconds = session.accumulated_time + current_segment_seconds;
+        let time_formatted = Self::format_duration(total_time_seconds);
 
         info!(
-            "Paused work on todo in issue {}: {} logged",
-            issue_key, time_formatted
+            "Paused work on todo in issue {}: {} logged (including {} accumulated)",
+            issue_key,
+            Self::format_duration(current_segment_seconds),
+            Self::format_duration(session.accumulated_time)
         );
 
         Ok(PauseTodoWorkResult {
             todo,
-            time_spent_seconds,
+            time_spent_seconds: total_time_seconds,
             time_spent_formatted: time_formatted.clone(),
             worklog,
             message: format!(
@@ -710,23 +879,26 @@ impl TodoTracker {
             })?
         };
 
-        // Calculate time that would have been logged
+        // Calculate time that would have been logged (including accumulated)
         let now = Utc::now();
         let duration = now.signed_duration_since(session.started_at);
-        let discarded_time_seconds = duration.num_seconds().max(0) as u64;
+        let current_segment_seconds = duration.num_seconds().max(0) as u64;
+        let total_discarded = session.accumulated_time + current_segment_seconds;
 
         info!(
-            "Canceled work on todo in issue {}: {} discarded",
+            "Canceled work on todo in issue {}: {} discarded (current: {}, accumulated: {})",
             issue_key,
-            Self::format_duration(discarded_time_seconds)
+            Self::format_duration(total_discarded),
+            Self::format_duration(current_segment_seconds),
+            Self::format_duration(session.accumulated_time)
         );
 
         Ok(CancelTodoWorkResult {
             todo,
-            discarded_time_seconds,
+            discarded_time_seconds: total_discarded,
             message: format!(
                 "Work session canceled. {} of work was discarded (not logged).",
-                Self::format_duration(discarded_time_seconds)
+                Self::format_duration(total_discarded)
             ),
         })
     }
@@ -807,16 +979,17 @@ impl TodoTracker {
 
         let now = Utc::now();
         let duration = now.signed_duration_since(session.started_at);
-        let auto_calculated_seconds = duration.num_seconds().max(0) as u64;
+        // This is the time since last checkpoint/start
+        let current_segment_seconds = duration.num_seconds().max(0) as u64;
 
-        // Check if the session crosses a day boundary (different dates)
+        // Check if the CURRENT SEGMENT crosses a day boundary (not total time)
         let started_date = session.started_at.date_naive();
         let current_date = now.date_naive();
         let crosses_day_boundary = started_date != current_date;
 
-        // Also check for sessions longer than 24 hours
+        // Also check for current segment longer than 24 hours
         const SECONDS_PER_DAY: u64 = 86400; // 24 * 60 * 60
-        let is_multi_day = crosses_day_boundary || auto_calculated_seconds > SECONDS_PER_DAY;
+        let is_multi_day = crosses_day_boundary || current_segment_seconds > SECONDS_PER_DAY;
 
         // Calculate explicit time if provided
         let explicit_time_seconds = if let Some(seconds) = params.time_spent_seconds {
@@ -827,9 +1000,9 @@ impl TodoTracker {
             params.time_spent_hours.map(|hours| (hours * 3600.0) as u64)
         };
 
-        // Validate multi-day sessions
+        // Validate multi-day sessions (for current segment only)
         if is_multi_day && explicit_time_seconds.is_none() {
-            let session_duration = Self::format_duration(auto_calculated_seconds);
+            let segment_duration = Self::format_duration(current_segment_seconds);
             let started_datetime = session.started_at.format("%B %d, %Y at %H:%M");
             let current_datetime = now.format("%B %d, %Y at %H:%M");
 
@@ -845,61 +1018,78 @@ impl TodoTracker {
             return Err(JiraMcpError::invalid_param(
                 "time_spent_hours",
                 format!(
-                    "Session spans multiple days. {}\n\
-                     Auto-calculated time: {}\n\
+                    "Current segment spans multiple days. {}\n\
+                     Current segment time: {}\n\
+                     Previously accumulated: {}\n\
                      \n\
-                     Please provide explicit time worked:\n\
+                     Please provide explicit time for this segment:\n\
                      - Use 'time_spent_hours' (e.g., 8.5 for 8.5 hours)\n\
                      - Use 'time_spent_minutes' (e.g., 480 for 8 hours)\n\
                      - Use 'time_spent_seconds' for precise control\n\
                      \n\
-                     Or better yet, use 'pause_todo_work' to log partial progress.\n\
+                     Or better yet, use 'checkpoint_todo_work' more frequently.\n\
                      \n\
                      Example: {{\"todo_id_or_index\": \"{}\", \"time_spent_hours\": 8}}",
-                    day_info, session_duration, params.todo_id_or_index
+                    day_info,
+                    segment_duration,
+                    Self::format_duration(session.accumulated_time),
+                    params.todo_id_or_index
                 ),
             ));
         }
 
-        // Use explicit time if provided, otherwise use auto-calculated
-        let time_spent_seconds = explicit_time_seconds.unwrap_or(auto_calculated_seconds);
+        // Use explicit time if provided, otherwise use current segment time
+        let current_log_seconds = explicit_time_seconds.unwrap_or(current_segment_seconds);
 
-        // Warn if explicit time differs significantly from auto-calculated
+        // Warn if explicit time differs significantly from current segment
         if let Some(explicit) = explicit_time_seconds {
-            if auto_calculated_seconds > 0 {
-                let diff_percent = if explicit > auto_calculated_seconds {
-                    ((explicit - auto_calculated_seconds) as f64 / auto_calculated_seconds as f64)
+            if current_segment_seconds > 0 {
+                let diff_percent = if explicit > current_segment_seconds {
+                    ((explicit - current_segment_seconds) as f64 / current_segment_seconds as f64)
                         * 100.0
                 } else {
-                    ((auto_calculated_seconds - explicit) as f64 / auto_calculated_seconds as f64)
+                    ((current_segment_seconds - explicit) as f64 / current_segment_seconds as f64)
                         * 100.0
                 };
 
                 if diff_percent > 20.0 {
                     warn!(
-                        "Explicit time ({}) differs from auto-calculated ({}) by {:.1}%",
+                        "Explicit time ({}) differs from current segment ({}) by {:.1}%",
                         Self::format_duration(explicit),
-                        Self::format_duration(auto_calculated_seconds),
+                        Self::format_duration(current_segment_seconds),
                         diff_percent
                     );
                 }
             }
         }
 
-        // Add worklog entry
-        let worklog_comment = params
-            .worklog_comment
-            .unwrap_or_else(|| format!("Work on todo: {}", todo.text));
+        // Add worklog entry for current segment (only if > 0)
+        let worklog = if current_log_seconds > 0 {
+            let worklog_comment = params
+                .worklog_comment
+                .unwrap_or_else(|| format!("Completed work on todo: {}", todo.text));
 
-        let worklog = self
-            .jira_client
-            .add_worklog(
-                &issue_key,
-                time_spent_seconds,
-                Some(worklog_comment),
-                Some(session.started_at),
-            )
-            .await?;
+            self.jira_client
+                .add_worklog(
+                    &issue_key,
+                    current_log_seconds,
+                    Some(worklog_comment),
+                    Some(session.started_at),
+                )
+                .await?
+        } else {
+            // No time in current segment, accumulated already logged
+            WorklogInfo {
+                id: "no-additional-time".to_string(),
+                author: "System".to_string(),
+                comment: Some("Work completed - time already logged via checkpoints".to_string()),
+                created: now.to_rfc3339(),
+                updated: now.to_rfc3339(),
+                started: session.started_at.to_rfc3339(),
+                time_spent: Some("0s".to_string()),
+                time_spent_seconds: Some(0),
+            }
+        };
 
         // Mark todo as completed if requested
         if params.mark_completed && !todo.completed {
@@ -910,19 +1100,27 @@ impl TodoTracker {
             todo.status = TodoStatus::Completed;
         }
 
-        let time_formatted = Self::format_duration(time_spent_seconds);
+        // Calculate total time (accumulated + current segment)
+        let total_time_seconds = session.accumulated_time + current_log_seconds;
+        let time_formatted = Self::format_duration(total_time_seconds);
 
         info!(
-            "Completed work on todo in issue {}: {} logged",
-            issue_key, time_formatted
+            "Completed work on todo in issue {}: {} logged total (current: {}, accumulated: {})",
+            issue_key,
+            time_formatted,
+            Self::format_duration(current_log_seconds),
+            Self::format_duration(session.accumulated_time)
         );
 
         Ok(CompleteTodoWorkResult {
             todo,
-            time_spent_seconds,
+            time_spent_seconds: total_time_seconds,
             time_spent_formatted: time_formatted.clone(),
             worklog,
-            message: format!("Logged {} to issue {}", time_formatted, issue_key),
+            message: format!(
+                "Logged {} to issue {} (total including checkpoints)",
+                time_formatted, issue_key
+            ),
         })
     }
 
@@ -1129,6 +1327,107 @@ impl TodoTracker {
             .await?;
 
         Ok(())
+    }
+
+    /// Start auto-checkpoint background task
+    ///
+    /// Periodically checkpoints all active sessions to JIRA to prevent data loss.
+    /// Returns a task handle that can be used to stop the background task.
+    pub fn start_auto_checkpoint_task(
+        self: Arc<Self>,
+        interval_minutes: u64,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(interval_minutes * 60));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                interval.tick().await;
+
+                info!("Auto-checkpoint: Checking for active sessions to checkpoint");
+
+                // Get all active sessions
+                let sessions_to_checkpoint: Vec<(String, WorkSession)> = {
+                    let sessions = self.active_sessions.read().await;
+                    sessions
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect()
+                };
+
+                if sessions_to_checkpoint.is_empty() {
+                    info!("Auto-checkpoint: No active sessions to checkpoint");
+                    continue;
+                }
+
+                info!(
+                    "Auto-checkpoint: Found {} active sessions",
+                    sessions_to_checkpoint.len()
+                );
+
+                // Checkpoint each session
+                for (session_key, session) in sessions_to_checkpoint {
+                    let now = Utc::now();
+                    let duration = now.signed_duration_since(session.started_at);
+                    let checkpoint_seconds = duration.num_seconds().max(0) as u64;
+
+                    // Only checkpoint if enough time has passed (at least 60 seconds)
+                    if checkpoint_seconds < 60 {
+                        info!(
+                            "Auto-checkpoint: Skipping {} - only {} seconds elapsed",
+                            session_key, checkpoint_seconds
+                        );
+                        continue;
+                    }
+
+                    info!(
+                        "Auto-checkpoint: Checkpointing {} - {} elapsed",
+                        session_key,
+                        Self::format_duration(checkpoint_seconds)
+                    );
+
+                    // Create worklog
+                    match self
+                        .jira_client
+                        .add_worklog(
+                            &session.issue_key,
+                            checkpoint_seconds,
+                            Some(format!("Auto-checkpoint: {}", session.todo_text)),
+                            Some(session.started_at),
+                        )
+                        .await
+                    {
+                        Ok(worklog) => {
+                            info!(
+                                "Auto-checkpoint: Successfully logged {} for {}",
+                                Self::format_duration(checkpoint_seconds),
+                                session_key
+                            );
+
+                            // Update session: reset start time and accumulate
+                            let mut updated_session = session.clone();
+                            updated_session.accumulated_time += checkpoint_seconds;
+                            updated_session.started_at = now;
+
+                            let mut sessions = self.active_sessions.write().await;
+                            sessions.insert(session_key.clone(), updated_session);
+
+                            info!(
+                                "Auto-checkpoint: Created worklog {} for {}",
+                                worklog.id, session_key
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Auto-checkpoint: Failed to log time for {}: {}",
+                                session_key, e
+                            );
+                        }
+                    }
+                }
+            }
+        })
     }
 }
 
