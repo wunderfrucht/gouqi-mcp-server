@@ -1141,7 +1141,8 @@ impl TodoTracker {
             // * [x] todo item
             if let Some(todo_text) = Self::parse_checkbox_line(trimmed) {
                 let completed = trimmed.contains("[x]") || trimmed.contains("[X]");
-                let id = Self::generate_todo_id(&todo_text, line_num);
+                // Generate ID based on text and position among duplicates (not line number)
+                let id = Self::generate_todo_id(&todos, &todo_text);
 
                 // Determine status based on completion and active work session
                 let session_key = format!("{}:{}", issue_key, id);
@@ -1183,14 +1184,23 @@ impl TodoTracker {
     }
 
     /// Generate a unique ID for a todo
-    fn generate_todo_id(text: &str, line_num: usize) -> String {
+    fn generate_todo_id(todos_so_far: &[TodoItem], text: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
+        // Count duplicates with same text
+        let duplicate_count = todos_so_far.iter().filter(|t| t.text == text).count();
+
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
-        line_num.hash(&mut hasher);
-        format!("todo-{:x}", hasher.finish())
+        let base_hash = hasher.finish();
+
+        // For duplicates, append sequence number to ensure uniqueness
+        if duplicate_count == 0 {
+            format!("todo-{:x}", base_hash)
+        } else {
+            format!("todo-{:x}-{}", base_hash, duplicate_count)
+        }
     }
 
     /// Add a todo to a description (preserves all existing content)
