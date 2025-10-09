@@ -21,14 +21,15 @@ use crate::tools::{
     AddCommentParams, AddCommentResult, AddCommentTool, AddTodoParams, AddTodoResult,
     AssignIssueParams, AssignIssueResult, AssignIssueTool, CancelTodoWorkParams,
     CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
-    CompleteTodoWorkParams, CompleteTodoWorkResult, DownloadAttachmentParams,
-    DownloadAttachmentResult, DownloadAttachmentTool, GetActiveWorkSessionsResult,
-    GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
-    GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool, GetIssueDetailsParams,
-    GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult,
-    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
-    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, ListTodosParams,
-    ListTodosResult, PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams,
+    CompleteTodoWorkParams, CompleteTodoWorkResult, CreateIssueParams, CreateIssueResult,
+    CreateIssueTool, DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
+    GetActiveWorkSessionsResult, GetAvailableTransitionsParams, GetAvailableTransitionsResult,
+    GetAvailableTransitionsTool, GetCreateMetadataParams, GetCreateMetadataResult,
+    GetCreateMetadataTool, GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool,
+    GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams,
+    GetUserIssuesResult, GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult,
+    IssueRelationshipsTool, ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool,
+    ListTodosParams, ListTodosResult, PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams,
     SearchIssuesResult, SearchIssuesTool, SetTodoBaseParams, SetTodoBaseResult,
     StartTodoWorkParams, StartTodoWorkResult, TodoTracker, TransitionIssueParams,
     TransitionIssueResult, TransitionIssueTool, UpdateCustomFieldsParams, UpdateCustomFieldsResult,
@@ -101,6 +102,8 @@ pub struct JiraMcpServer {
     assign_issue_tool: Arc<AssignIssueTool>,
     get_custom_fields_tool: Arc<GetCustomFieldsTool>,
     update_custom_fields_tool: Arc<UpdateCustomFieldsTool>,
+    create_issue_tool: Arc<CreateIssueTool>,
+    get_create_metadata_tool: Arc<GetCreateMetadataTool>,
     todo_tracker: Arc<TodoTracker>,
 }
 
@@ -207,6 +210,11 @@ impl JiraMcpServer {
         let update_custom_fields_tool =
             Arc::new(UpdateCustomFieldsTool::new(Arc::clone(&jira_client)));
 
+        let create_issue_tool = Arc::new(CreateIssueTool::new(Arc::clone(&jira_client)));
+
+        let get_create_metadata_tool =
+            Arc::new(GetCreateMetadataTool::new(Arc::clone(&jira_client)));
+
         let todo_tracker = Arc::new(TodoTracker::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
@@ -237,6 +245,8 @@ impl JiraMcpServer {
             assign_issue_tool,
             get_custom_fields_tool,
             update_custom_fields_tool,
+            create_issue_tool,
+            get_create_metadata_tool,
             todo_tracker,
         })
     }
@@ -317,6 +327,11 @@ impl JiraMcpServer {
         let update_custom_fields_tool =
             Arc::new(UpdateCustomFieldsTool::new(Arc::clone(&jira_client)));
 
+        let create_issue_tool = Arc::new(CreateIssueTool::new(Arc::clone(&jira_client)));
+
+        let get_create_metadata_tool =
+            Arc::new(GetCreateMetadataTool::new(Arc::clone(&jira_client)));
+
         let todo_tracker = Arc::new(TodoTracker::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
@@ -341,6 +356,8 @@ impl JiraMcpServer {
             assign_issue_tool,
             get_custom_fields_tool,
             update_custom_fields_tool,
+            create_issue_tool,
+            get_create_metadata_tool,
             todo_tracker,
         })
     }
@@ -453,7 +470,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 26, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
+            tools_count: 28, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
         })
     }
 
@@ -759,6 +776,70 @@ impl JiraMcpServer {
                 error!("update_custom_fields failed: {}", e);
                 anyhow::anyhow!(e)
             })
+    }
+
+    /// Get issue creation metadata for a JIRA project
+    ///
+    /// Discovers what issue types are available in a project and what fields are
+    /// required or optional for each type. This is essential for understanding what
+    /// parameters to provide when creating issues, especially for custom fields.
+    ///
+    /// Use this tool to:
+    /// - Discover available issue types (Task, Bug, Story, Epic, etc.)
+    /// - Find required fields for a specific issue type
+    /// - Get allowed values for constrained fields (priorities, components, etc.)
+    /// - Identify custom field IDs and their types
+    ///
+    /// # Examples
+    /// - Get all issue types: `{"project_key": "PROJ"}`
+    /// - Get Bug metadata only: `{"project_key": "PROJ", "issue_type": "Bug"}`
+    /// - Get detailed schemas: `{"project_key": "PROJ", "issue_type": "Story", "include_schemas": true}`
+    #[instrument(skip(self))]
+    pub async fn get_create_metadata(
+        &self,
+        params: GetCreateMetadataParams,
+    ) -> anyhow::Result<GetCreateMetadataResult> {
+        self.get_create_metadata_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("get_create_metadata failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Create a new JIRA issue
+    ///
+    /// Creates a new issue in JIRA with comprehensive parameter support.
+    /// Designed to be simple for basic use cases while supporting advanced features.
+    ///
+    /// Key features:
+    /// - Simple: Just provide summary and project_key for basic tasks
+    /// - Smart defaults: Auto-detects subtasks, handles "assign_to_me", etc.
+    /// - initial_todos: Automatically formats todo checklists
+    /// - Custom fields: Full support for any custom field
+    /// - Epic/Story points: Convenience parameters with auto-detection
+    ///
+    /// IMPORTANT: Use get_create_metadata first to discover:
+    /// - Available issue types for your project
+    /// - Required fields for each issue type
+    /// - Allowed values for constrained fields
+    /// - Custom field IDs and types
+    ///
+    /// # Examples
+    /// - Simple task: `{"project_key": "PROJ", "summary": "Fix login bug"}`
+    /// - Bug with priority: `{"project_key": "PROJ", "summary": "Payment fails", "issue_type": "Bug", "priority": "High"}`
+    /// - Story with todos: `{"project_key": "PROJ", "summary": "Dark mode", "issue_type": "Story", "initial_todos": ["Design colors", "Implement toggle"], "assign_to_me": true}`
+    /// - Subtask: `{"parent_issue_key": "PROJ-123", "summary": "Write tests"}`
+    #[instrument(skip(self))]
+    pub async fn create_issue(
+        &self,
+        params: CreateIssueParams,
+    ) -> anyhow::Result<CreateIssueResult> {
+        self.create_issue_tool.execute(params).await.map_err(|e| {
+            error!("create_issue failed: {}", e);
+            anyhow::anyhow!(e)
+        })
     }
 
     /// List todos from an issue description

@@ -166,6 +166,11 @@ impl JiraClient {
         Ok(jira_client)
     }
 
+    /// Get the base URL of the JIRA instance
+    pub fn base_url(&self) -> &str {
+        &self.config.jira_url
+    }
+
     /// Test the connection to the JIRA instance
     #[instrument(skip_all)]
     async fn test_connection(&self) -> JiraMcpResult<()> {
