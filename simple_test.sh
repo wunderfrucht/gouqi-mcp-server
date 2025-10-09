@@ -116,6 +116,25 @@ send_request() {
     echo "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"get_issue_details\",\"arguments\":{\"issue_key\":\"$ISSUE_KEY\",\"include_comments\":false,\"include_attachments\":false,\"include_worklogs\":true}}}"
     sleep 0.5
 
+    # Extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
+    PROJECT_KEY=$(echo "$ISSUE_KEY" | cut -d'-' -f1)
+
+    # Test 10: Get Create Metadata
+    echo ""
+    echo "============================================================"
+    echo "TEST 10: Get Create Metadata for Project $PROJECT_KEY (NEW TOOL!)"
+    echo "============================================================"
+    echo "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"get_create_metadata\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"issue_type\":\"Task\"}}}"
+    sleep 0.5
+
+    # Test 11: Create a Test Issue
+    echo ""
+    echo "============================================================"
+    echo "TEST 11: Create Test Issue (NEW TOOL!)"
+    echo "============================================================"
+    echo "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"create_issue\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"summary\":\"🧪 Test issue from simple_test.sh - PLEASE DELETE\",\"description\":\"This is a test issue created by the automated test script.\",\"initial_todos\":[\"Verify issue creation\",\"Delete this test issue\"],\"assign_to_me\":true,\"labels\":[\"test\",\"automated\"]}}}"
+    sleep 0.5
+
 } | env JIRA_URL="$JIRA_URL" JIRA_AUTH_TYPE="$JIRA_AUTH_TYPE" JIRA_USERNAME="$JIRA_USERNAME" JIRA_PASSWORD="$JIRA_PASSWORD" $SERVER 2>&1 | python3 -c '
 import sys, json
 
@@ -151,6 +170,24 @@ for line in sys.stdin:
                                     print(f"  • [{created}] {time_spent} - {comment[:50]}")
                                 print(f"\n  📊 Total time from last 5 entries: {total_seconds}s")
                                 print(f"  ✅ Expected ~5s (3s first segment + 2s second segment)")
+                            # Special handling for create metadata (test 10)
+                            elif req_id == 10 and "issue_types" in parsed:
+                                print("\n📋 CREATE METADATA:")
+                                issue_types = parsed.get("issue_types", [])
+                                for it in issue_types:
+                                    name = it.get("name", "Unknown")
+                                    required = ", ".join(it.get("required_fields", [])[:5])
+                                    print(f"  • {name}: Required fields: {required}")
+                            # Special handling for create issue (test 11)
+                            elif req_id == 11 and "issue_key" in parsed:
+                                print("\n🎉 ISSUE CREATED:")
+                                issue_key = parsed.get("issue_key", "")
+                                issue_url = parsed.get("issue_url", "")
+                                summary = parsed.get("summary", "")
+                                print(f"  📝 Issue: {issue_key}")
+                                print(f"  📌 Summary: {summary}")
+                                print(f"  🔗 URL: {issue_url}")
+                                print(f"\n  ⚠️  REMINDER: Please delete this test issue!")
                             else:
                                 print(json.dumps(parsed, indent=2))
                         except:
