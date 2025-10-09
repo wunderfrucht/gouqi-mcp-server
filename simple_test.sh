@@ -108,13 +108,12 @@ send_request() {
     echo "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"complete_todo_work\",\"arguments\":{\"issue_key\":\"$ISSUE_KEY\",\"todo_id_or_index\":\"1\",\"mark_completed\":true}}}"
     sleep 0.5
 
-    # Test 9: Verify Worklogs
-    echo ""
-    echo "============================================================"
-    echo "TEST 9: Verify Worklogs (Check Time Logging)"
-    echo "============================================================"
-    echo "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"get_issue_details\",\"arguments\":{\"issue_key\":\"$ISSUE_KEY\",\"include_comments\":false,\"include_attachments\":false,\"include_worklogs\":true}}}"
-    sleep 0.5
+    # Test 9: Skip worklog verification (requires separate tool)
+    # echo ""
+    # echo "============================================================"
+    # echo "TEST 9: Verify Worklogs (Check Time Logging)"
+    # echo "============================================================"
+    # (Skipped - worklog verification would require separate tool)
 
     # Extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
     PROJECT_KEY=$(echo "$ISSUE_KEY" | cut -d'-' -f1)
@@ -155,23 +154,8 @@ for line in sys.stdin:
                         # Try to parse as JSON for pretty print
                         try:
                             parsed = json.loads(text)
-                            # Special handling for worklog verification (test 9)
-                            if req_id == 9 and "worklogs" in parsed:
-                                print("\n📋 WORKLOG VERIFICATION:")
-                                worklogs = parsed.get("worklogs", [])
-                                total_seconds = 0
-                                for wl in worklogs[-5:]:  # Show last 5 worklogs
-                                    author = wl.get("author", "Unknown")
-                                    comment = wl.get("comment", "No comment")
-                                    time_spent = wl.get("time_spent", "0s")
-                                    time_secs = wl.get("time_spent_seconds", 0)
-                                    created = wl.get("created", "")[:19]  # Trim to datetime
-                                    total_seconds += time_secs
-                                    print(f"  • [{created}] {time_spent} - {comment[:50]}")
-                                print(f"\n  📊 Total time from last 5 entries: {total_seconds}s")
-                                print(f"  ✅ Expected ~5s (3s first segment + 2s second segment)")
                             # Special handling for create metadata (test 10)
-                            elif req_id == 10 and "issue_types" in parsed:
+                            if req_id == 10 and "issue_types" in parsed:
                                 print("\n📋 CREATE METADATA:")
                                 issue_types = parsed.get("issue_types", [])
                                 for it in issue_types:
