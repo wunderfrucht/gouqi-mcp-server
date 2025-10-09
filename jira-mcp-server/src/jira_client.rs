@@ -49,6 +49,8 @@ pub struct IssueInfo {
     pub project_name: String,
     pub labels: Vec<String>,
     pub components: Vec<String>,
+    pub story_points: Option<f64>,
+    pub acceptance_criteria: Option<String>,
 }
 
 /// Detailed issue information
@@ -438,6 +440,34 @@ impl JiraClient {
 
     /// Convert gouqi Issue to our IssueInfo format
     fn convert_issue_info(&self, issue: &Issue) -> IssueInfo {
+        // Extract story points - common field names: customfield_10016, Story Points, etc.
+        let story_points = issue
+            .field::<f64>("customfield_10016")
+            .and_then(|r| r.ok())
+            .or_else(|| issue.field::<f64>("Story Points").and_then(|r| r.ok()))
+            .or_else(|| {
+                // Try as integer and convert to f64
+                issue
+                    .field::<i64>("customfield_10016")
+                    .and_then(|r| r.ok())
+                    .map(|i| i as f64)
+            });
+
+        // Extract acceptance criteria - common field names
+        let acceptance_criteria = issue
+            .field::<String>("customfield_10100")
+            .and_then(|r| r.ok())
+            .or_else(|| {
+                issue
+                    .field::<String>("Acceptance Criteria")
+                    .and_then(|r| r.ok())
+            })
+            .or_else(|| {
+                issue
+                    .field::<String>("customfield_10007")
+                    .and_then(|r| r.ok())
+            });
+
         IssueInfo {
             key: issue.key.clone(),
             id: issue.id.clone(),
@@ -457,6 +487,8 @@ impl JiraClient {
             project_name: issue.project().map(|p| p.name.clone()).unwrap_or_default(),
             labels: issue.labels(),
             components: Vec::new(), // Components would need to be implemented based on gouqi API
+            story_points,
+            acceptance_criteria,
         }
     }
 

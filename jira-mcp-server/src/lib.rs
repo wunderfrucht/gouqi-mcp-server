@@ -19,17 +19,20 @@ use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
     AddCommentParams, AddCommentResult, AddCommentTool, AddTodoParams, AddTodoResult,
-    CancelTodoWorkParams, CancelTodoWorkResult, CompleteTodoWorkParams, CompleteTodoWorkResult,
-    DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
-    GetActiveWorkSessionsResult, GetAvailableTransitionsParams, GetAvailableTransitionsResult,
-    GetAvailableTransitionsTool, GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool,
-    GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool, IssueRelationshipsParams,
-    IssueRelationshipsResult, IssueRelationshipsTool, ListAttachmentsParams, ListAttachmentsResult,
-    ListAttachmentsTool, ListTodosParams, ListTodosResult, PauseTodoWorkParams,
-    PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
-    SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams, StartTodoWorkResult, TodoTracker,
-    TransitionIssueParams, TransitionIssueResult, TransitionIssueTool, UpdateDescription,
-    UpdateDescriptionParams, UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
+    CancelTodoWorkParams, CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
+    CompleteTodoWorkParams, CompleteTodoWorkResult, DownloadAttachmentParams,
+    DownloadAttachmentResult, DownloadAttachmentTool, GetActiveWorkSessionsResult,
+    GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
+    GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool, GetIssueDetailsParams,
+    GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams, GetUserIssuesResult,
+    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool,
+    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, ListTodosParams,
+    ListTodosResult, PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams,
+    SearchIssuesResult, SearchIssuesTool, SetTodoBaseParams, SetTodoBaseResult,
+    StartTodoWorkParams, StartTodoWorkResult, TodoTracker, TransitionIssueParams,
+    TransitionIssueResult, TransitionIssueTool, UpdateCustomFieldsParams, UpdateCustomFieldsResult,
+    UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
+    UpdateTodoParams, UpdateTodoResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -65,7 +68,7 @@ pub struct JiraServerStatus {
 /// Uses the #[mcp_server] macro for automatic MCP infrastructure generation.
 #[mcp_server(
     name = "JIRA MCP Server",
-    version = "0.5.0",
+    version = "0.7.0",
     description = "AI-friendly JIRA integration server with semantic search, commenting, and relationship analysis capabilities",
     auth = "disabled" // Start with disabled for development, can be changed to "file" for production
 )]
@@ -94,6 +97,8 @@ pub struct JiraMcpServer {
     update_description_tool: Arc<UpdateDescription>,
     get_available_transitions_tool: Arc<GetAvailableTransitionsTool>,
     transition_issue_tool: Arc<TransitionIssueTool>,
+    get_custom_fields_tool: Arc<GetCustomFieldsTool>,
+    update_custom_fields_tool: Arc<UpdateCustomFieldsTool>,
     todo_tracker: Arc<TodoTracker>,
 }
 
@@ -193,11 +198,20 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let get_custom_fields_tool = Arc::new(GetCustomFieldsTool::new(Arc::clone(&jira_client)));
+
+        let update_custom_fields_tool =
+            Arc::new(UpdateCustomFieldsTool::new(Arc::clone(&jira_client)));
+
         let todo_tracker = Arc::new(TodoTracker::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
             Arc::clone(&cache),
         ));
+
+        // Start auto-checkpoint background task (every 30 minutes)
+        let _auto_checkpoint_handle = Arc::clone(&todo_tracker).start_auto_checkpoint_task(30);
+        info!("Auto-checkpoint task started (interval: 30 minutes)");
 
         info!("JIRA MCP Server initialized successfully");
 
@@ -216,6 +230,8 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            get_custom_fields_tool,
+            update_custom_fields_tool,
             todo_tracker,
         })
     }
@@ -289,6 +305,11 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let get_custom_fields_tool = Arc::new(GetCustomFieldsTool::new(Arc::clone(&jira_client)));
+
+        let update_custom_fields_tool =
+            Arc::new(UpdateCustomFieldsTool::new(Arc::clone(&jira_client)));
+
         let todo_tracker = Arc::new(TodoTracker::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
@@ -310,6 +331,8 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            get_custom_fields_tool,
+            update_custom_fields_tool,
             todo_tracker,
         })
     }
@@ -416,13 +439,13 @@ impl JiraMcpServer {
 
         Ok(JiraServerStatus {
             server_name: "JIRA MCP Server".to_string(),
-            version: "0.4.0".to_string(),
+            version: "0.7.0".to_string(),
             uptime_seconds: self.get_uptime_seconds(),
             jira_url: self.config.jira_url.clone(),
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 22, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
+            tools_count: 25, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, get_custom_fields, update_custom_fields, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
         })
     }
 
@@ -646,6 +669,63 @@ impl JiraMcpServer {
             })
     }
 
+    /// Get custom fields from a JIRA issue
+    ///
+    /// Discovers and returns all custom fields present in a JIRA issue, including
+    /// their field IDs, types, current values, and human-readable displays.
+    /// Also attempts to detect common fields like story points and acceptance criteria.
+    ///
+    /// This is useful for:
+    /// - Understanding what custom fields are available in your JIRA instance
+    /// - Finding the correct field ID for updating custom fields
+    /// - Inspecting current custom field values
+    ///
+    /// # Examples
+    /// - Get all custom fields: `{"issue_key": "PROJ-123"}`
+    #[instrument(skip(self))]
+    pub async fn get_custom_fields(
+        &self,
+        params: GetCustomFieldsParams,
+    ) -> anyhow::Result<GetCustomFieldsResult> {
+        self.get_custom_fields_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("get_custom_fields failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Update custom fields in a JIRA issue
+    ///
+    /// Updates custom field values in a JIRA issue. Supports updating by field ID
+    /// or using convenience parameters for common fields like story points and
+    /// acceptance criteria (with automatic field detection).
+    ///
+    /// This tool allows you to:
+    /// - Update story points using auto-detection or explicit field ID
+    /// - Update acceptance criteria using auto-detection or explicit field ID
+    /// - Update any custom field by providing its field ID and value
+    ///
+    /// # Examples
+    /// - Set story points: `{"issue_key": "PROJ-123", "story_points": 5}`
+    /// - Set acceptance criteria: `{"issue_key": "PROJ-123", "acceptance_criteria": "User can login successfully"}`
+    /// - Update specific field: `{"issue_key": "PROJ-123", "custom_field_updates": {"customfield_10050": "value"}}`
+    /// - Override field ID: `{"issue_key": "PROJ-123", "story_points": 8, "story_points_field_id": "customfield_10016"}`
+    #[instrument(skip(self))]
+    pub async fn update_custom_fields(
+        &self,
+        params: UpdateCustomFieldsParams,
+    ) -> anyhow::Result<UpdateCustomFieldsResult> {
+        self.update_custom_fields_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("update_custom_fields failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
     /// List todos from an issue description
     ///
     /// Parses markdown-style checkboxes from an issue description and returns
@@ -746,6 +826,36 @@ impl JiraMcpServer {
             .await
             .map_err(|e| {
                 error!("complete_todo_work failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Checkpoint work progress - log time but keep session active
+    ///
+    /// Creates a checkpoint by logging the time accumulated since the session started
+    /// (or since the last checkpoint), then resets the timer to continue tracking.
+    /// Perfect for logging progress during long work sessions without stopping the timer.
+    ///
+    /// Benefits:
+    /// - Avoid multi-day session issues by checkpointing before midnight
+    /// - Create incremental progress records in JIRA
+    /// - Maintain accurate time tracking for long sessions
+    /// - Survive server restarts with logged time
+    ///
+    /// # Examples
+    /// - Regular checkpoint: `{"todo_id_or_index": "1"}`
+    /// - With comment: `{"todo_id_or_index": "1", "worklog_comment": "Completed initial implementation"}`
+    /// - End of day checkpoint: `{"todo_id_or_index": "1", "worklog_comment": "End of day checkpoint, will continue tomorrow"}`
+    #[instrument(skip(self))]
+    pub async fn checkpoint_todo_work(
+        &self,
+        params: CheckpointTodoWorkParams,
+    ) -> anyhow::Result<CheckpointTodoWorkResult> {
+        self.todo_tracker
+            .checkpoint_todo_work(params)
+            .await
+            .map_err(|e| {
+                error!("checkpoint_todo_work failed: {}", e);
                 anyhow::anyhow!(e)
             })
     }
