@@ -19,7 +19,8 @@ use crate::error::{JiraMcpError, JiraMcpResult};
 use crate::jira_client::JiraClient;
 use crate::tools::{
     AddCommentParams, AddCommentResult, AddCommentTool, AddTodoParams, AddTodoResult,
-    CancelTodoWorkParams, CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
+    AssignIssueParams, AssignIssueResult, AssignIssueTool, CancelTodoWorkParams,
+    CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
     CompleteTodoWorkParams, CompleteTodoWorkResult, DownloadAttachmentParams,
     DownloadAttachmentResult, DownloadAttachmentTool, GetActiveWorkSessionsResult,
     GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
@@ -97,6 +98,7 @@ pub struct JiraMcpServer {
     update_description_tool: Arc<UpdateDescription>,
     get_available_transitions_tool: Arc<GetAvailableTransitionsTool>,
     transition_issue_tool: Arc<TransitionIssueTool>,
+    assign_issue_tool: Arc<AssignIssueTool>,
     get_custom_fields_tool: Arc<GetCustomFieldsTool>,
     update_custom_fields_tool: Arc<UpdateCustomFieldsTool>,
     todo_tracker: Arc<TodoTracker>,
@@ -198,6 +200,8 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let assign_issue_tool = Arc::new(AssignIssueTool::new(Arc::clone(&jira_client)));
+
         let get_custom_fields_tool = Arc::new(GetCustomFieldsTool::new(Arc::clone(&jira_client)));
 
         let update_custom_fields_tool =
@@ -230,6 +234,7 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            assign_issue_tool,
             get_custom_fields_tool,
             update_custom_fields_tool,
             todo_tracker,
@@ -305,6 +310,8 @@ impl JiraMcpServer {
 
         let transition_issue_tool = Arc::new(TransitionIssueTool::new(Arc::clone(&jira_client)));
 
+        let assign_issue_tool = Arc::new(AssignIssueTool::new(Arc::clone(&jira_client)));
+
         let get_custom_fields_tool = Arc::new(GetCustomFieldsTool::new(Arc::clone(&jira_client)));
 
         let update_custom_fields_tool =
@@ -331,6 +338,7 @@ impl JiraMcpServer {
             update_description_tool,
             get_available_transitions_tool,
             transition_issue_tool,
+            assign_issue_tool,
             get_custom_fields_tool,
             update_custom_fields_tool,
             todo_tracker,
@@ -445,7 +453,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 25, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, get_custom_fields, update_custom_fields, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
+            tools_count: 26, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
         })
     }
 
@@ -667,6 +675,33 @@ impl JiraMcpServer {
                 error!("transition_issue failed: {}", e);
                 anyhow::anyhow!(e)
             })
+    }
+
+    /// Assign a JIRA issue to a user
+    ///
+    /// Assigns an issue to a specific user or unassigns it. You can use:
+    /// - "me" or "self" to assign to yourself
+    /// - A specific username or account ID
+    /// - null/empty to unassign the issue
+    ///
+    /// This is particularly useful for:
+    /// - Automated testing (assign issues to yourself)
+    /// - Workflow automation (assign based on conditions)
+    /// - Task distribution (assign to team members)
+    ///
+    /// # Examples
+    /// - Assign to yourself: `{"issue_key": "PROJ-123", "assignee": "me"}`
+    /// - Assign to user: `{"issue_key": "PROJ-123", "assignee": "john.doe@example.com"}`
+    /// - Unassign: `{"issue_key": "PROJ-123", "assignee": null}`
+    #[instrument(skip(self))]
+    pub async fn assign_issue(
+        &self,
+        params: AssignIssueParams,
+    ) -> anyhow::Result<AssignIssueResult> {
+        self.assign_issue_tool.execute(params).await.map_err(|e| {
+            error!("assign_issue failed: {}", e);
+            anyhow::anyhow!(e)
+        })
     }
 
     /// Get custom fields from a JIRA issue
