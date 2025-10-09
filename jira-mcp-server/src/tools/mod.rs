@@ -3,6 +3,7 @@
 //! Contains all the MCP tools that provide AI-friendly interfaces to JIRA operations.
 
 pub mod add_comment;
+pub mod assign_issue;
 pub mod download_attachment;
 pub mod get_custom_fields;
 pub mod issue_details;
@@ -16,6 +17,7 @@ pub mod update_description;
 pub mod user_issues;
 
 pub use add_comment::*;
+pub use assign_issue::*;
 pub use download_attachment::*;
 pub use get_custom_fields::*;
 pub use issue_details::*;
