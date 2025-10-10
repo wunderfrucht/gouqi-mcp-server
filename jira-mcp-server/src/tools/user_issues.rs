@@ -539,12 +539,16 @@ impl GetUserIssuesTool {
             }
         }
 
-        // Order by updated date descending
-        jql_parts.push("ORDER BY updated DESC".to_string());
+        // Build final JQL with ORDER BY clause
+        let jql = if jql_parts.is_empty() {
+            // Should not happen since we always have assignee filter, but handle it gracefully
+            "ORDER BY updated DESC".to_string()
+        } else {
+            let conditions = jql_parts.join(" AND ");
+            format!("{} ORDER BY updated DESC", conditions)
+        };
 
-        let jql = jql_parts.join(" AND ");
-
-        // Determine complexity
+        // Determine complexity (don't count ORDER BY as a part)
         let complexity = if jql_parts.len() > 4 {
             crate::semantic_mapping::QueryComplexity::Complex
         } else if jql_parts.len() > 2 {

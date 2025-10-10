@@ -286,8 +286,8 @@ impl SemanticMapper {
 
         // Build final JQL
         let jql = if jql_parts.is_empty() {
-            // Default query if no filters
-            "ORDER BY updated DESC".to_string()
+            // Default query if no filters - add 30-day constraint to avoid unbounded queries on JIRA Cloud
+            "created >= -30d ORDER BY updated DESC".to_string()
         } else {
             let conditions = jql_parts.join(" AND ");
             format!("{} ORDER BY updated DESC", conditions)
