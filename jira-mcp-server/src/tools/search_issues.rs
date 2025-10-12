@@ -89,7 +89,10 @@ impl std::fmt::Display for SearchIssuesResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match serde_json::to_string(self) {
             Ok(json) => write!(f, "{}", json),
-            Err(_) => write!(f, "{{\"error\": \"Failed to serialize SearchIssuesResult\"}}"),
+            Err(_) => write!(
+                f,
+                "{{\"error\": \"Failed to serialize SearchIssuesResult\"}}"
+            ),
         }
     }
 }

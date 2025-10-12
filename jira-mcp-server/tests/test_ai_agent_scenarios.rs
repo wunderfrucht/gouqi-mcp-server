@@ -610,7 +610,7 @@ fn scenario_quality_gate() {
 
     // Check: Has comments (indicating discussion)?
     if let Some(comments) = details_result["comments"].as_array() {
-        if comments.len() > 0 {
+        if !comments.is_empty() {
             println!("   ✅ Has team discussion ({} comments)", comments.len());
             passed += 1;
         } else {

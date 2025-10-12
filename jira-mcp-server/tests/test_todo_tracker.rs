@@ -1,7 +1,7 @@
 /// Integration tests for todo tracker functionality
 mod common;
 
-use common::{test_issue_key, test_project_key, McpTestClient};
+use common::{test_issue_key, McpTestClient};
 use serde_json::json;
 
 /// Helper function to add a todo and return its 1-based index
@@ -78,10 +78,10 @@ fn test_list_todos_basic() {
     assert!(result.get("total_count").is_some());
     assert_eq!(result["issue_key"], issue_key);
 
-    let todos = result["todos"]
+    // Verify todos is an array (expect will panic if it's not)
+    result["todos"]
         .as_array()
         .expect("todos should be an array");
-    assert!(todos.len() >= 0, "Should return todos array");
 }
 
 #[test]
@@ -489,7 +489,7 @@ fn test_get_active_work_sessions() {
 
     assert!(total_count >= 1, "Should have at least one active session");
     assert!(
-        sessions.len() >= 1,
+        !sessions.is_empty(),
         "Should have at least one active session"
     );
 

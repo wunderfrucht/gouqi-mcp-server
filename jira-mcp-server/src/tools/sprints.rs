@@ -309,7 +309,7 @@ impl GetSprintInfoTool {
             .await
             .map_err(|e| {
                 if e.to_string().contains("404") {
-                    JiraMcpError::not_found("sprint", &params.sprint_id.to_string())
+                    JiraMcpError::not_found("sprint", params.sprint_id.to_string())
                 } else {
                     JiraMcpError::internal(format!("Failed to get sprint: {}", e))
                 }
@@ -347,7 +347,7 @@ impl GetSprintIssuesTool {
             .await
             .map_err(|e| {
                 if e.to_string().contains("404") {
-                    JiraMcpError::not_found("sprint", &params.sprint_id.to_string())
+                    JiraMcpError::not_found("sprint", params.sprint_id.to_string())
                 } else {
                     JiraMcpError::internal(format!("Failed to get sprint: {}", e))
                 }
@@ -412,7 +412,7 @@ impl MoveToSprintTool {
             .await
             .map_err(|e| {
                 if e.to_string().contains("404") {
-                    JiraMcpError::not_found("sprint", &params.sprint_id.to_string())
+                    JiraMcpError::not_found("sprint", params.sprint_id.to_string())
                 } else {
                     JiraMcpError::internal(format!("Failed to get sprint: {}", e))
                 }

@@ -103,8 +103,8 @@ impl LabelsTool {
 
         // Validate that at least one operation is specified
         if !params.replace_all
-            && params.add_labels.as_ref().map_or(true, |v| v.is_empty())
-            && params.remove_labels.as_ref().map_or(true, |v| v.is_empty())
+            && params.add_labels.as_ref().is_none_or(|v| v.is_empty())
+            && params.remove_labels.as_ref().is_none_or(|v| v.is_empty())
         {
             return Err(JiraMcpError::invalid_param(
                 "labels",
@@ -229,8 +229,7 @@ impl LabelsTool {
             let encoded_jql = jql.replace(" ", "%20").replace("=", "%3D");
             let endpoint = format!(
                 "/search?jql={}&fields=labels&maxResults={}",
-                encoded_jql,
-                max_results
+                encoded_jql, max_results
             );
 
             let response: Value = self

@@ -27,22 +27,22 @@ use crate::tools::{
     DownloadAttachmentTool, GetActiveWorkSessionsResult, GetAvailableComponentsParams,
     GetAvailableComponentsResult, GetAvailableLabelsParams, GetAvailableLabelsResult,
     GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
-    GetCreateMetadataParams, GetCreateMetadataResult, GetCreateMetadataTool,
-    GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool, GetIssueDetailsParams,
-    GetIssueDetailsResult, GetIssueDetailsTool, GetIssueLinkTypesResult, GetIssueLinkTypesTool,
-    GetSprintInfoParams, GetSprintInfoResult, GetSprintInfoTool, GetSprintIssuesParams,
-    GetSprintIssuesResult, GetSprintIssuesTool, GetUserIssuesParams, GetUserIssuesResult,
-    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult,
-    IssueRelationshipsTool, LabelsTool, LinkIssuesParams, LinkIssuesResult, LinkIssuesTool,
-    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, ListSprintsParams,
-    ListSprintsResult, ListSprintsTool, ListTodosParams, ListTodosResult, ManageLabelsParams,
-    ManageLabelsResult, MoveToSprintParams, MoveToSprintResult, MoveToSprintTool,
-    PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult,
-    SearchIssuesTool, SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams,
-    StartTodoWorkResult, TodoTracker, TransitionIssueParams, TransitionIssueResult,
-    TransitionIssueTool, UpdateComponentsParams, UpdateComponentsResult, UpdateCustomFieldsParams,
-    UpdateCustomFieldsResult, UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams,
-    UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
+    GetCreateMetadataParams, GetCreateMetadataResult, GetCreateMetadataTool, GetCustomFieldsParams,
+    GetCustomFieldsResult, GetCustomFieldsTool, GetIssueDetailsParams, GetIssueDetailsResult,
+    GetIssueDetailsTool, GetIssueLinkTypesResult, GetIssueLinkTypesTool, GetSprintInfoParams,
+    GetSprintInfoResult, GetSprintInfoTool, GetSprintIssuesParams, GetSprintIssuesResult,
+    GetSprintIssuesTool, GetUserIssuesParams, GetUserIssuesResult, GetUserIssuesTool,
+    IssueRelationshipsParams, IssueRelationshipsResult, IssueRelationshipsTool, LabelsTool,
+    LinkIssuesParams, LinkIssuesResult, LinkIssuesTool, ListAttachmentsParams,
+    ListAttachmentsResult, ListAttachmentsTool, ListSprintsParams, ListSprintsResult,
+    ListSprintsTool, ListTodosParams, ListTodosResult, ManageLabelsParams, ManageLabelsResult,
+    MoveToSprintParams, MoveToSprintResult, MoveToSprintTool, PauseTodoWorkParams,
+    PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
+    SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams, StartTodoWorkResult, TodoTracker,
+    TransitionIssueParams, TransitionIssueResult, TransitionIssueTool, UpdateComponentsParams,
+    UpdateComponentsResult, UpdateCustomFieldsParams, UpdateCustomFieldsResult,
+    UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
+    UpdateTodoParams, UpdateTodoResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -247,7 +247,8 @@ impl JiraMcpServer {
         // Issue linking tools
         let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
         let delete_issue_link_tool = Arc::new(DeleteIssueLinkTool::new(Arc::clone(&jira_client)));
-        let get_issue_link_types_tool = Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
+        let get_issue_link_types_tool =
+            Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
 
         // Labels and components tools
         let labels_tool = Arc::new(LabelsTool::new(Arc::clone(&jira_client)));
@@ -388,7 +389,8 @@ impl JiraMcpServer {
         // Issue linking tools
         let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
         let delete_issue_link_tool = Arc::new(DeleteIssueLinkTool::new(Arc::clone(&jira_client)));
-        let get_issue_link_types_tool = Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
+        let get_issue_link_types_tool =
+            Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
 
         // Labels and components tools
         let labels_tool = Arc::new(LabelsTool::new(Arc::clone(&jira_client)));
@@ -1140,10 +1142,13 @@ impl JiraMcpServer {
         &self,
         params: ListSprintsParams,
     ) -> anyhow::Result<ListSprintsResult> {
-        self.list_sprints_tool.execute(params).await.map_err(|e: JiraMcpError| {
-            error!("list_sprints failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.list_sprints_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("list_sprints failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Get detailed information about a specific sprint
@@ -1199,10 +1204,13 @@ impl JiraMcpServer {
         &self,
         params: MoveToSprintParams,
     ) -> anyhow::Result<MoveToSprintResult> {
-        self.move_to_sprint_tool.execute(params).await.map_err(|e: JiraMcpError| {
-            error!("move_to_sprint failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.move_to_sprint_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("move_to_sprint failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Link two issues together with a specific link type
@@ -1219,14 +1227,14 @@ impl JiraMcpServer {
     /// - Link two issues: `{"inward_issue_key": "PROJ-123", "outward_issue_key": "PROJ-456", "link_type": "Blocks"}`
     /// - Link with comment: `{"inward_issue_key": "PROJ-123", "outward_issue_key": "PROJ-456", "link_type": "Relates", "comment": "These are related"}`
     #[instrument(skip(self))]
-    pub async fn link_issues(
-        &self,
-        params: LinkIssuesParams,
-    ) -> anyhow::Result<LinkIssuesResult> {
-        self.link_issues_tool.execute(params).await.map_err(|e: JiraMcpError| {
-            error!("link_issues failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+    pub async fn link_issues(&self, params: LinkIssuesParams) -> anyhow::Result<LinkIssuesResult> {
+        self.link_issues_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("link_issues failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Delete an issue link
@@ -1241,10 +1249,13 @@ impl JiraMcpServer {
         &self,
         params: DeleteIssueLinkParams,
     ) -> anyhow::Result<DeleteIssueLinkResult> {
-        self.delete_issue_link_tool.execute(params).await.map_err(|e: JiraMcpError| {
-            error!("delete_issue_link failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.delete_issue_link_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("delete_issue_link failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Get all available issue link types
@@ -1256,10 +1267,13 @@ impl JiraMcpServer {
     /// - Get all link types: `{}`
     #[instrument(skip(self))]
     pub async fn get_issue_link_types(&self) -> anyhow::Result<GetIssueLinkTypesResult> {
-        self.get_issue_link_types_tool.execute().await.map_err(|e: JiraMcpError| {
-            error!("get_issue_link_types failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.get_issue_link_types_tool
+            .execute()
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("get_issue_link_types failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Manage labels on a JIRA issue
@@ -1302,10 +1316,13 @@ impl JiraMcpServer {
         &self,
         params: GetAvailableLabelsParams,
     ) -> anyhow::Result<GetAvailableLabelsResult> {
-        self.labels_tool.get_available_labels(params).await.map_err(|e| {
-            error!("get_available_labels failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.labels_tool
+            .get_available_labels(params)
+            .await
+            .map_err(|e| {
+                error!("get_available_labels failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Update components on a JIRA issue
@@ -1325,10 +1342,13 @@ impl JiraMcpServer {
         &self,
         params: UpdateComponentsParams,
     ) -> anyhow::Result<UpdateComponentsResult> {
-        self.components_tool.update_components(params).await.map_err(|e| {
-            error!("update_components failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.components_tool
+            .update_components(params)
+            .await
+            .map_err(|e| {
+                error!("update_components failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 
     /// Get available components for a project
@@ -1343,10 +1363,13 @@ impl JiraMcpServer {
         &self,
         params: GetAvailableComponentsParams,
     ) -> anyhow::Result<GetAvailableComponentsResult> {
-        self.components_tool.get_available_components(params).await.map_err(|e| {
-            error!("get_available_components failed: {}", e);
-            anyhow::anyhow!(e)
-        })
+        self.components_tool
+            .get_available_components(params)
+            .await
+            .map_err(|e| {
+                error!("get_available_components failed: {}", e);
+                anyhow::anyhow!(e)
+            })
     }
 }
 
