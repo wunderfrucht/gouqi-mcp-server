@@ -529,7 +529,7 @@ impl JiraMcpServer {
 
         Ok(JiraServerStatus {
             server_name: "JIRA MCP Server".to_string(),
-            version: "0.7.0".to_string(),
+            version: "0.8.0".to_string(),
             uptime_seconds: self.get_uptime_seconds(),
             jira_url: self.config.jira_url.clone(),
             jira_connection_status: connection_status,
