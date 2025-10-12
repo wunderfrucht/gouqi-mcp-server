@@ -251,7 +251,9 @@ fn scenario_code_review_workflow() {
 
     let details_result =
         McpTestClient::extract_tool_result(&details).expect("Failed to extract result");
-    let current_status = details_result["status"].as_str().expect("Expected status");
+    let current_status = details_result["issue_details"]["issue_info"]["status"]
+        .as_str()
+        .expect("Expected status");
     println!("   Current status: {}", current_status);
 
     // 2. Check available transitions
