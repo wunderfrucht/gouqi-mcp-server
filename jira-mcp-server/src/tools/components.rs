@@ -119,10 +119,7 @@ impl ComponentsTool {
                 if e.to_string().contains("404") || e.to_string().contains("Not Found") {
                     JiraMcpError::not_found("issue", &params.issue_key)
                 } else if e.to_string().contains("component") {
-                    JiraMcpError::invalid_param(
-                        "components",
-                        format!("Invalid component: {}", e),
-                    )
+                    JiraMcpError::invalid_param("components", format!("Invalid component: {}", e))
                 } else {
                     JiraMcpError::internal(format!("Failed to update components: {}", e))
                 }
@@ -132,11 +129,12 @@ impl ComponentsTool {
         let issue: Value = self
             .jira_client
             .client
-            .get("api", &format!("/issue/{}?fields=components", params.issue_key))
+            .get(
+                "api",
+                &format!("/issue/{}?fields=components", params.issue_key),
+            )
             .await
-            .map_err(|e| {
-                JiraMcpError::internal(format!("Failed to fetch updated issue: {}", e))
-            })?;
+            .map_err(|e| JiraMcpError::internal(format!("Failed to fetch updated issue: {}", e)))?;
 
         let components: Vec<ComponentInfo> = issue["fields"]["components"]
             .as_array()
@@ -154,7 +152,10 @@ impl ComponentsTool {
             .unwrap_or_default();
 
         let message = if params.components.is_empty() {
-            format!("Successfully cleared all components from {}", params.issue_key)
+            format!(
+                "Successfully cleared all components from {}",
+                params.issue_key
+            )
         } else {
             format!(
                 "Successfully set {} component(s) on {}",

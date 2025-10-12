@@ -18,17 +18,15 @@ fn test_get_available_labels_global() {
         )
         .expect("Failed to call get_available_labels");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("labels").is_some(), "No labels field");
     assert!(result.get("total").is_some(), "No total field");
     assert!(result.get("is_last").is_some(), "No is_last field");
 
-    let labels = result["labels"]
-        .as_array()
-        .expect("labels is not an array");
+    let labels = result["labels"].as_array().expect("labels is not an array");
 
     // Labels array can be empty, but should exist
     assert!(labels.len() <= 50, "Should respect max_results limit");
@@ -50,16 +48,14 @@ fn test_get_available_labels_for_project() {
         )
         .expect("Failed to call get_available_labels");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("labels").is_some(), "No labels field");
     assert!(result.get("total").is_some(), "No total field");
 
-    let labels = result["labels"]
-        .as_array()
-        .expect("labels is not an array");
+    let labels = result["labels"].as_array().expect("labels is not an array");
 
     // Labels should be unique and sorted
     for i in 0..labels.len().saturating_sub(1) {
@@ -92,8 +88,8 @@ fn test_manage_labels_add() {
         )
         .expect("Failed to call manage_labels");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert_eq!(
@@ -102,12 +98,13 @@ fn test_manage_labels_add() {
         "Issue key mismatch"
     );
     assert!(result.get("added").is_some(), "No added field");
-    assert!(result.get("current_labels").is_some(), "No current_labels field");
+    assert!(
+        result.get("current_labels").is_some(),
+        "No current_labels field"
+    );
     assert!(result.get("message").is_some(), "No message field");
 
-    let added = result["added"]
-        .as_array()
-        .expect("added is not an array");
+    let added = result["added"].as_array().expect("added is not an array");
     assert!(
         added.contains(&json!(test_label)),
         "Test label should be in added list"
@@ -152,8 +149,8 @@ fn test_manage_labels_remove() {
         )
         .expect("Failed to call manage_labels");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("removed").is_some(), "No removed field");
@@ -197,12 +194,15 @@ fn test_manage_labels_replace_all() {
         )
         .expect("Failed to call manage_labels");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("added").is_some(), "No added field");
-    assert!(result.get("current_labels").is_some(), "No current_labels field");
+    assert!(
+        result.get("current_labels").is_some(),
+        "No current_labels field"
+    );
 
     let current_labels = result["current_labels"]
         .as_array()
@@ -254,8 +254,8 @@ fn test_get_available_components() {
         )
         .expect("Failed to call get_available_components");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("components").is_some(), "No components field");
@@ -326,8 +326,8 @@ fn test_update_components() {
         )
         .expect("Failed to call update_components");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert_eq!(
@@ -368,8 +368,8 @@ fn test_update_components_clear() {
         )
         .expect("Failed to call update_components");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert_eq!(
@@ -406,8 +406,7 @@ fn test_update_components_invalid_issue() {
         .expect("Failed to call update_components");
 
     // Should fail
-    McpTestClient::extract_tool_result(&response)
-        .expect("Should fail with invalid issue key");
+    McpTestClient::extract_tool_result(&response).expect("Should fail with invalid issue key");
 }
 
 #[test]
@@ -426,8 +425,7 @@ fn test_get_available_components_invalid_project() {
         .expect("Failed to call get_available_components");
 
     // Should fail
-    McpTestClient::extract_tool_result(&response)
-        .expect("Should fail with invalid project key");
+    McpTestClient::extract_tool_result(&response).expect("Should fail with invalid project key");
 }
 
 #[test]
@@ -448,11 +446,14 @@ fn test_search_issues_with_labels() {
         )
         .expect("Failed to call search_issues");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
-    assert!(result.get("search_result").is_some(), "No search_result field");
+    assert!(
+        result.get("search_result").is_some(),
+        "No search_result field"
+    );
     assert!(result.get("jql_query").is_some(), "No jql_query field");
 
     let jql = result["jql_query"].as_str().unwrap();
@@ -481,11 +482,14 @@ fn test_search_issues_with_components() {
         )
         .expect("Failed to call search_issues");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
-    assert!(result.get("search_result").is_some(), "No search_result field");
+    assert!(
+        result.get("search_result").is_some(),
+        "No search_result field"
+    );
     assert!(result.get("jql_query").is_some(), "No jql_query field");
 
     let jql = result["jql_query"].as_str().unwrap();
@@ -514,8 +518,8 @@ fn test_search_issues_with_multiple_components() {
         )
         .expect("Failed to call search_issues");
 
-    let result = McpTestClient::extract_tool_result(&response)
-        .expect("Failed to extract tool result");
+    let result =
+        McpTestClient::extract_tool_result(&response).expect("Failed to extract tool result");
 
     // Verify structure
     assert!(result.get("jql_query").is_some(), "No jql_query field");

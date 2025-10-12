@@ -7,12 +7,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 /// MCP Test Client for sending JSON-RPC requests to the server
+#[allow(dead_code)]
 pub struct McpTestClient {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
 }
 
+#[allow(dead_code)]
 impl McpTestClient {
     /// Create a new test client by spawning the server
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
@@ -197,11 +199,13 @@ impl Drop for McpTestClient {
 }
 
 /// Helper function to get the test project key from environment or use default
+#[allow(dead_code)]
 pub fn test_project_key() -> String {
     std::env::var("TEST_PROJECT_KEY").unwrap_or_else(|_| "SCRUM".to_string())
 }
 
 /// Helper function to get a test issue key
+#[allow(dead_code)]
 pub fn test_issue_key() -> String {
     std::env::var("TEST_ISSUE_KEY").unwrap_or_else(|_| format!("{}-1", test_project_key()))
 }

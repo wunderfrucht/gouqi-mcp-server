@@ -200,7 +200,7 @@ impl LinkIssuesTool {
                 if e.to_string().contains("404") {
                     JiraMcpError::not_found(
                         "issue or link type",
-                        &format!(
+                        format!(
                             "{}, {}, or {}",
                             params.inward_issue_key, params.outward_issue_key, params.link_type
                         ),
