@@ -18,6 +18,11 @@ jobs:
   pre-commit:
     name: Pre-commit checks
     runs-on: ubuntu-latest
+    env:
+      JIRA_URL: ${{ secrets.JIRA_URL }}
+      JIRA_AUTH_TYPE: ${{ secrets.JIRA_AUTH_TYPE }}
+      JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+      JIRA_PASSWORD: ${{ secrets.JIRA_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -86,6 +91,11 @@ jobs:
   test:
     name: Test suite
     runs-on: ubuntu-latest
+    env:
+      JIRA_URL: ${{ secrets.JIRA_URL }}
+      JIRA_AUTH_TYPE: ${{ secrets.JIRA_AUTH_TYPE }}
+      JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+      JIRA_PASSWORD: ${{ secrets.JIRA_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
