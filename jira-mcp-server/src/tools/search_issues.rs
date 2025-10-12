@@ -37,6 +37,7 @@ pub struct SearchIssuesParams {
 
     /// Semantic status categories (optional)
     /// Examples: ["open", "in_progress", "done", "blocked"]
+    #[serde(alias = "status_filter")]
     pub status: Option<Vec<String>>,
 
     /// Created after date filter (optional)
@@ -45,6 +46,10 @@ pub struct SearchIssuesParams {
 
     /// Label filters (optional)
     pub labels: Option<Vec<String>>,
+
+    /// Component filters (optional)
+    /// Examples: ["Backend", "Frontend"], ["API"]
+    pub components: Option<Vec<String>>,
 
     /// Parent issue filter (optional)
     /// Examples: "none" (no parent), "any" (has parent), "PROJ-123" (specific parent issue key)
@@ -75,6 +80,18 @@ pub struct SearchIssuesResult {
 
     /// Performance information
     pub performance: SearchPerformance,
+}
+
+// Workaround for pulseengine-mcp-macros bug #62
+// The macro uses format!("{:?}") instead of serde_json serialization
+// Implement Display to return JSON format
+impl std::fmt::Display for SearchIssuesResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match serde_json::to_string(self) {
+            Ok(json) => write!(f, "{}", json),
+            Err(_) => write!(f, "{{\"error\": \"Failed to serialize SearchIssuesResult\"}}"),
+        }
+    }
 }
 
 /// Performance metrics for search operations
@@ -182,8 +199,13 @@ impl SearchIssuesTool {
             .as_ref()
             .filter(|arr| !arr.is_empty())
             .map(|arr| arr.as_slice());
+        let components = params
+            .components
+            .as_ref()
+            .filter(|arr| !arr.is_empty())
+            .map(|arr| arr.as_slice());
 
-        let jql_result = self.semantic_mapper.build_search_jql(
+        let jql_result = self.semantic_mapper.build_search_jql_with_components(
             params.query_text.as_deref(),
             issue_types,
             params.assigned_to.as_deref(),
@@ -191,6 +213,7 @@ impl SearchIssuesTool {
             status,
             params.created_after.as_deref(),
             labels,
+            components,
             params.parent_filter.as_deref(),
             params.epic_filter.as_deref(),
         )?;
@@ -336,6 +359,21 @@ impl SearchIssuesTool {
             }
         }
 
+        // Validate components (if specified and non-empty)
+        if let Some(components) = &params.components {
+            // Allow empty arrays - treat as None
+            if !components.is_empty() {
+                for component in components {
+                    if component.trim().is_empty() {
+                        return Err(JiraMcpError::invalid_param(
+                            "components",
+                            "component names cannot be empty",
+                        ));
+                    }
+                }
+            }
+        }
+
         // Validate that at least one search criterion is provided
         // (unless it's a general "list all" query)
         let has_criteria = params.query_text.is_some()
@@ -345,7 +383,8 @@ impl SearchIssuesTool {
             || params.board_name.is_some()
             || params.status.is_some()
             || params.created_after.is_some()
-            || params.labels.is_some();
+            || params.labels.is_some()
+            || params.components.is_some();
 
         if !has_criteria {
             warn!("No search criteria provided, will return recent issues");
@@ -382,6 +421,7 @@ mod tests {
             status: Some(vec!["open".to_string(), "in_progress".to_string()]),
             created_after: Some("7 days ago".to_string()),
             labels: Some(vec!["urgent".to_string()]),
+            components: Some(vec!["Backend".to_string()]),
             parent_filter: None,
             epic_filter: None,
             limit: Some(50),

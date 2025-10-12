@@ -21,20 +21,28 @@ use crate::tools::{
     AddCommentParams, AddCommentResult, AddCommentTool, AddTodoParams, AddTodoResult,
     AssignIssueParams, AssignIssueResult, AssignIssueTool, CancelTodoWorkParams,
     CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
-    CompleteTodoWorkParams, CompleteTodoWorkResult, CreateIssueParams, CreateIssueResult,
-    CreateIssueTool, DownloadAttachmentParams, DownloadAttachmentResult, DownloadAttachmentTool,
-    GetActiveWorkSessionsResult, GetAvailableTransitionsParams, GetAvailableTransitionsResult,
-    GetAvailableTransitionsTool, GetCreateMetadataParams, GetCreateMetadataResult,
-    GetCreateMetadataTool, GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool,
-    GetIssueDetailsParams, GetIssueDetailsResult, GetIssueDetailsTool, GetUserIssuesParams,
-    GetUserIssuesResult, GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult,
-    IssueRelationshipsTool, ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool,
-    ListTodosParams, ListTodosResult, PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams,
-    SearchIssuesResult, SearchIssuesTool, SetTodoBaseParams, SetTodoBaseResult,
-    StartTodoWorkParams, StartTodoWorkResult, TodoTracker, TransitionIssueParams,
-    TransitionIssueResult, TransitionIssueTool, UpdateCustomFieldsParams, UpdateCustomFieldsResult,
-    UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
-    UpdateTodoParams, UpdateTodoResult,
+    CompleteTodoWorkParams, CompleteTodoWorkResult, ComponentsTool, CreateIssueParams,
+    CreateIssueResult, CreateIssueTool, DeleteIssueLinkParams, DeleteIssueLinkResult,
+    DeleteIssueLinkTool, DownloadAttachmentParams, DownloadAttachmentResult,
+    DownloadAttachmentTool, GetActiveWorkSessionsResult, GetAvailableComponentsParams,
+    GetAvailableComponentsResult, GetAvailableLabelsParams, GetAvailableLabelsResult,
+    GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
+    GetCreateMetadataParams, GetCreateMetadataResult, GetCreateMetadataTool,
+    GetCustomFieldsParams, GetCustomFieldsResult, GetCustomFieldsTool, GetIssueDetailsParams,
+    GetIssueDetailsResult, GetIssueDetailsTool, GetIssueLinkTypesResult, GetIssueLinkTypesTool,
+    GetSprintInfoParams, GetSprintInfoResult, GetSprintInfoTool, GetSprintIssuesParams,
+    GetSprintIssuesResult, GetSprintIssuesTool, GetUserIssuesParams, GetUserIssuesResult,
+    GetUserIssuesTool, IssueRelationshipsParams, IssueRelationshipsResult,
+    IssueRelationshipsTool, LabelsTool, LinkIssuesParams, LinkIssuesResult, LinkIssuesTool,
+    ListAttachmentsParams, ListAttachmentsResult, ListAttachmentsTool, ListSprintsParams,
+    ListSprintsResult, ListSprintsTool, ListTodosParams, ListTodosResult, ManageLabelsParams,
+    ManageLabelsResult, MoveToSprintParams, MoveToSprintResult, MoveToSprintTool,
+    PauseTodoWorkParams, PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult,
+    SearchIssuesTool, SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams,
+    StartTodoWorkResult, TodoTracker, TransitionIssueParams, TransitionIssueResult,
+    TransitionIssueTool, UpdateComponentsParams, UpdateComponentsResult, UpdateCustomFieldsParams,
+    UpdateCustomFieldsResult, UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams,
+    UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -105,6 +113,15 @@ pub struct JiraMcpServer {
     create_issue_tool: Arc<CreateIssueTool>,
     get_create_metadata_tool: Arc<GetCreateMetadataTool>,
     todo_tracker: Arc<TodoTracker>,
+    list_sprints_tool: Arc<ListSprintsTool>,
+    get_sprint_info_tool: Arc<GetSprintInfoTool>,
+    get_sprint_issues_tool: Arc<GetSprintIssuesTool>,
+    move_to_sprint_tool: Arc<MoveToSprintTool>,
+    link_issues_tool: Arc<LinkIssuesTool>,
+    delete_issue_link_tool: Arc<DeleteIssueLinkTool>,
+    get_issue_link_types_tool: Arc<GetIssueLinkTypesTool>,
+    labels_tool: Arc<LabelsTool>,
+    components_tool: Arc<ComponentsTool>,
 }
 
 impl Default for JiraMcpServer {
@@ -221,6 +238,21 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        // Sprint management tools
+        let list_sprints_tool = Arc::new(ListSprintsTool::new(Arc::clone(&jira_client)));
+        let get_sprint_info_tool = Arc::new(GetSprintInfoTool::new(Arc::clone(&jira_client)));
+        let get_sprint_issues_tool = Arc::new(GetSprintIssuesTool::new(Arc::clone(&jira_client)));
+        let move_to_sprint_tool = Arc::new(MoveToSprintTool::new(Arc::clone(&jira_client)));
+
+        // Issue linking tools
+        let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
+        let delete_issue_link_tool = Arc::new(DeleteIssueLinkTool::new(Arc::clone(&jira_client)));
+        let get_issue_link_types_tool = Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
+
+        // Labels and components tools
+        let labels_tool = Arc::new(LabelsTool::new(Arc::clone(&jira_client)));
+        let components_tool = Arc::new(ComponentsTool::new(Arc::clone(&jira_client)));
+
         // Start auto-checkpoint background task (every 30 minutes)
         let _auto_checkpoint_handle = Arc::clone(&todo_tracker).start_auto_checkpoint_task(30);
         info!("Auto-checkpoint task started (interval: 30 minutes)");
@@ -248,6 +280,15 @@ impl JiraMcpServer {
             create_issue_tool,
             get_create_metadata_tool,
             todo_tracker,
+            list_sprints_tool,
+            get_sprint_info_tool,
+            get_sprint_issues_tool,
+            move_to_sprint_tool,
+            link_issues_tool,
+            delete_issue_link_tool,
+            get_issue_link_types_tool,
+            labels_tool,
+            components_tool,
         })
     }
 
@@ -338,6 +379,21 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        // Sprint management tools
+        let list_sprints_tool = Arc::new(ListSprintsTool::new(Arc::clone(&jira_client)));
+        let get_sprint_info_tool = Arc::new(GetSprintInfoTool::new(Arc::clone(&jira_client)));
+        let get_sprint_issues_tool = Arc::new(GetSprintIssuesTool::new(Arc::clone(&jira_client)));
+        let move_to_sprint_tool = Arc::new(MoveToSprintTool::new(Arc::clone(&jira_client)));
+
+        // Issue linking tools
+        let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
+        let delete_issue_link_tool = Arc::new(DeleteIssueLinkTool::new(Arc::clone(&jira_client)));
+        let get_issue_link_types_tool = Arc::new(GetIssueLinkTypesTool::new(Arc::clone(&jira_client)));
+
+        // Labels and components tools
+        let labels_tool = Arc::new(LabelsTool::new(Arc::clone(&jira_client)));
+        let components_tool = Arc::new(ComponentsTool::new(Arc::clone(&jira_client)));
+
         Ok(Self {
             start_time: Instant::now(),
             jira_client,
@@ -359,6 +415,15 @@ impl JiraMcpServer {
             create_issue_tool,
             get_create_metadata_tool,
             todo_tracker,
+            list_sprints_tool,
+            get_sprint_info_tool,
+            get_sprint_issues_tool,
+            move_to_sprint_tool,
+            link_issues_tool,
+            delete_issue_link_tool,
+            get_issue_link_types_tool,
+            labels_tool,
+            components_tool,
         })
     }
 
@@ -470,7 +535,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 28, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base
+            tools_count: 39, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base, list_sprints, get_sprint_info, get_sprint_issues, move_to_sprint, link_issues, delete_issue_link, get_issue_link_types, manage_labels, get_available_labels, update_components, get_available_components
         })
     }
 
@@ -1059,6 +1124,229 @@ impl JiraMcpServer {
                 error!("get_active_work_sessions failed: {}", e);
                 anyhow::anyhow!(e)
             })
+    }
+
+    /// List sprints for a specific board
+    ///
+    /// Returns all sprints for a board, with optional filtering by state (active, future, closed).
+    /// Supports pagination for boards with many sprints.
+    ///
+    /// # Examples
+    /// - List all sprints for a board: `{"board_id": 1}`
+    /// - List only active sprints: `{"board_id": 1, "state": "active"}`
+    /// - List with pagination: `{"board_id": 1, "limit": 20, "start_at": 0}`
+    #[instrument(skip(self))]
+    pub async fn list_sprints(
+        &self,
+        params: ListSprintsParams,
+    ) -> anyhow::Result<ListSprintsResult> {
+        self.list_sprints_tool.execute(params).await.map_err(|e: JiraMcpError| {
+            error!("list_sprints failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Get detailed information about a specific sprint
+    ///
+    /// Retrieves sprint details including name, state, start/end dates, and board information.
+    ///
+    /// # Examples
+    /// - Get sprint info: `{"sprint_id": 123}`
+    #[instrument(skip(self))]
+    pub async fn get_sprint_info(
+        &self,
+        params: GetSprintInfoParams,
+    ) -> anyhow::Result<GetSprintInfoResult> {
+        self.get_sprint_info_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("get_sprint_info failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Get all issues in a specific sprint
+    ///
+    /// Returns all issues that are currently in the sprint, with pagination support.
+    ///
+    /// # Examples
+    /// - Get all sprint issues: `{"sprint_id": 123}`
+    /// - Get with pagination: `{"sprint_id": 123, "limit": 50, "start_at": 0}`
+    #[instrument(skip(self))]
+    pub async fn get_sprint_issues(
+        &self,
+        params: GetSprintIssuesParams,
+    ) -> anyhow::Result<GetSprintIssuesResult> {
+        self.get_sprint_issues_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("get_sprint_issues failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Move issues to a sprint
+    ///
+    /// Moves one or more issues to the specified sprint. Issues must exist and be accessible.
+    ///
+    /// # Examples
+    /// - Move single issue: `{"sprint_id": 123, "issue_keys": ["PROJ-456"]}`
+    /// - Move multiple issues: `{"sprint_id": 123, "issue_keys": ["PROJ-456", "PROJ-789"]}`
+    #[instrument(skip(self))]
+    pub async fn move_to_sprint(
+        &self,
+        params: MoveToSprintParams,
+    ) -> anyhow::Result<MoveToSprintResult> {
+        self.move_to_sprint_tool.execute(params).await.map_err(|e: JiraMcpError| {
+            error!("move_to_sprint failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Link two issues together with a specific link type
+    ///
+    /// Creates a directional link between two issues. Common link types include:
+    /// - "Blocks" / "is blocked by"
+    /// - "Relates" / "relates to"
+    /// - "Duplicates" / "is duplicated by"
+    /// - "Clones" / "is cloned by"
+    ///
+    /// Use get_issue_link_types to see all available link types in your JIRA instance.
+    ///
+    /// # Examples
+    /// - Link two issues: `{"inward_issue_key": "PROJ-123", "outward_issue_key": "PROJ-456", "link_type": "Blocks"}`
+    /// - Link with comment: `{"inward_issue_key": "PROJ-123", "outward_issue_key": "PROJ-456", "link_type": "Relates", "comment": "These are related"}`
+    #[instrument(skip(self))]
+    pub async fn link_issues(
+        &self,
+        params: LinkIssuesParams,
+    ) -> anyhow::Result<LinkIssuesResult> {
+        self.link_issues_tool.execute(params).await.map_err(|e: JiraMcpError| {
+            error!("link_issues failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Delete an issue link
+    ///
+    /// Removes a link between two issues. You need the link ID (not issue keys).
+    /// You can get link IDs from the issue_relationships tool or from issue details.
+    ///
+    /// # Examples
+    /// - Delete a link: `{"link_id": "10001"}`
+    #[instrument(skip(self))]
+    pub async fn delete_issue_link(
+        &self,
+        params: DeleteIssueLinkParams,
+    ) -> anyhow::Result<DeleteIssueLinkResult> {
+        self.delete_issue_link_tool.execute(params).await.map_err(|e: JiraMcpError| {
+            error!("delete_issue_link failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Get all available issue link types
+    ///
+    /// Returns all link types configured in your JIRA instance, including their
+    /// inward and outward descriptions. Use the "name" field when creating links.
+    ///
+    /// # Examples
+    /// - Get all link types: `{}`
+    #[instrument(skip(self))]
+    pub async fn get_issue_link_types(&self) -> anyhow::Result<GetIssueLinkTypesResult> {
+        self.get_issue_link_types_tool.execute().await.map_err(|e: JiraMcpError| {
+            error!("get_issue_link_types failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Manage labels on a JIRA issue
+    ///
+    /// Add, remove, or replace labels on an issue. Labels are useful for categorization,
+    /// filtering, and organization. This tool supports:
+    /// - Adding specific labels while keeping existing ones
+    /// - Removing specific labels
+    /// - Replacing all labels with a new set
+    ///
+    /// Use get_available_labels to see what labels are used in your project.
+    ///
+    /// # Examples
+    /// - Add labels: `{"issue_key": "PROJ-123", "add_labels": ["urgent", "backend"]}`
+    /// - Remove labels: `{"issue_key": "PROJ-123", "remove_labels": ["wontfix"]}`
+    /// - Add and remove: `{"issue_key": "PROJ-123", "add_labels": ["reviewed"], "remove_labels": ["needs-review"]}`
+    /// - Replace all: `{"issue_key": "PROJ-123", "add_labels": ["production", "critical"], "replace_all": true}`
+    #[instrument(skip(self))]
+    pub async fn manage_labels(
+        &self,
+        params: ManageLabelsParams,
+    ) -> anyhow::Result<ManageLabelsResult> {
+        self.labels_tool.manage_labels(params).await.map_err(|e| {
+            error!("manage_labels failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Get available labels
+    ///
+    /// Returns a list of labels that are available or in use. Can be filtered by project
+    /// to see only labels used in that project, or get all global labels.
+    ///
+    /// # Examples
+    /// - Get all labels: `{}`
+    /// - Get labels for project: `{"project_key": "PROJ"}`
+    /// - Get with pagination: `{"max_results": 50, "start_at": 0}`
+    #[instrument(skip(self))]
+    pub async fn get_available_labels(
+        &self,
+        params: GetAvailableLabelsParams,
+    ) -> anyhow::Result<GetAvailableLabelsResult> {
+        self.labels_tool.get_available_labels(params).await.map_err(|e| {
+            error!("get_available_labels failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Update components on a JIRA issue
+    ///
+    /// Sets the components for an issue. Components represent subsystems or categories
+    /// within a project (e.g., "Backend", "Frontend", "API", "Database").
+    /// This operation replaces all existing components.
+    ///
+    /// Use get_available_components to see what components are available in your project.
+    ///
+    /// # Examples
+    /// - Set components: `{"issue_key": "PROJ-123", "components": ["Backend", "API"]}`
+    /// - Clear components: `{"issue_key": "PROJ-123", "components": []}`
+    /// - Set by ID: `{"issue_key": "PROJ-123", "components": ["10000", "10001"]}`
+    #[instrument(skip(self))]
+    pub async fn update_components(
+        &self,
+        params: UpdateComponentsParams,
+    ) -> anyhow::Result<UpdateComponentsResult> {
+        self.components_tool.update_components(params).await.map_err(|e| {
+            error!("update_components failed: {}", e);
+            anyhow::anyhow!(e)
+        })
+    }
+
+    /// Get available components for a project
+    ///
+    /// Returns all components configured for a specific project. Components represent
+    /// subsystems or categories and can be used to organize and filter issues.
+    ///
+    /// # Examples
+    /// - Get project components: `{"project_key": "PROJ"}`
+    #[instrument(skip(self))]
+    pub async fn get_available_components(
+        &self,
+        params: GetAvailableComponentsParams,
+    ) -> anyhow::Result<GetAvailableComponentsResult> {
+        self.components_tool.get_available_components(params).await.map_err(|e| {
+            error!("get_available_components failed: {}", e);
+            anyhow::anyhow!(e)
+        })
     }
 }
 

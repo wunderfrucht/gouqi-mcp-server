@@ -302,6 +302,166 @@ impl SemanticMapper {
         })
     }
 
+    /// Build a JQL query from search parameters with components support
+    #[allow(clippy::too_many_arguments)]
+    pub fn build_search_jql_with_components(
+        &self,
+        query_text: Option<&str>,
+        issue_types: Option<&[String]>,
+        assigned_to: Option<&str>,
+        project_key: Option<&str>,
+        status: Option<&[String]>,
+        created_after: Option<&str>,
+        labels: Option<&[String]>,
+        components: Option<&[String]>,
+        parent_filter: Option<&str>,
+        epic_filter: Option<&str>,
+    ) -> JiraMcpResult<JqlQuery> {
+        let mut jql_parts = Vec::new();
+        let mut complexity = QueryComplexity::Simple;
+
+        // Project filter (if specified)
+        if let Some(project) = project_key {
+            jql_parts.push(format!("project = \"{}\"", project));
+        }
+
+        // Text search (if specified)
+        if let Some(text) = query_text {
+            if !text.trim().is_empty() {
+                // Use JIRA text search
+                jql_parts.push(format!("text ~ \"{}\"", escape_jql_string(text)));
+                complexity = QueryComplexity::Complex;
+            }
+        }
+
+        // Issue types
+        if let Some(types) = issue_types {
+            if !types.is_empty() {
+                let jira_types = self.map_issue_types(types, project_key)?;
+                if !jira_types.is_empty() {
+                    let types_clause = if jira_types.len() == 1 {
+                        format!("issuetype = \"{}\"", jira_types[0])
+                    } else {
+                        let type_list = jira_types
+                            .iter()
+                            .map(|t| format!("\"{}\"", t))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!("issuetype IN ({})", type_list)
+                    };
+                    jql_parts.push(types_clause);
+                }
+            }
+        }
+
+        // Assignee
+        if let Some(assignee) = assigned_to {
+            let resolved_user = self.resolve_user_reference(assignee)?;
+            let assignee_clause = if resolved_user == "UNASSIGNED" {
+                "assignee is EMPTY".to_string()
+            } else {
+                format!("assignee = \"{}\"", resolved_user)
+            };
+            jql_parts.push(assignee_clause);
+        }
+
+        // Status
+        if let Some(statuses) = status {
+            if !statuses.is_empty() {
+                let jira_statuses = self.map_status_categories(statuses)?;
+                if !jira_statuses.is_empty() {
+                    let status_clause = if jira_statuses.len() == 1 {
+                        format!("status = \"{}\"", jira_statuses[0])
+                    } else {
+                        let status_list = jira_statuses
+                            .iter()
+                            .map(|s| format!("\"{}\"", s))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!("status IN ({})", status_list)
+                    };
+                    jql_parts.push(status_clause);
+                }
+            }
+        }
+
+        // Created after
+        if let Some(created) = created_after {
+            let date_clause = parse_date_filter(created)?;
+            jql_parts.push(format!("created >= \"{}\"", date_clause));
+        }
+
+        // Labels
+        if let Some(label_list) = labels {
+            if !label_list.is_empty() {
+                for label in label_list {
+                    jql_parts.push(format!("labels = \"{}\"", label));
+                }
+            }
+        }
+
+        // Components
+        if let Some(component_list) = components {
+            if !component_list.is_empty() {
+                let components_clause = if component_list.len() == 1 {
+                    format!("component = \"{}\"", component_list[0])
+                } else {
+                    let component_names = component_list
+                        .iter()
+                        .map(|c| format!("\"{}\"", c))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("component IN ({})", component_names)
+                };
+                jql_parts.push(components_clause);
+            }
+        }
+
+        // Parent filter
+        if let Some(parent) = parent_filter {
+            let parent_clause = match parent.to_lowercase().as_str() {
+                "none" => "parent is EMPTY".to_string(),
+                "any" => "parent is not EMPTY".to_string(),
+                issue_key => format!("parent = \"{}\"", issue_key),
+            };
+            jql_parts.push(parent_clause);
+        }
+
+        // Epic link filter
+        if let Some(epic) = epic_filter {
+            let epic_clause = match epic.to_lowercase().as_str() {
+                "none" => "\"Epic Link\" is EMPTY".to_string(),
+                "any" => "\"Epic Link\" is not EMPTY".to_string(),
+                epic_key => format!("\"Epic Link\" = \"{}\"", epic_key),
+            };
+            jql_parts.push(epic_clause);
+        }
+
+        // Determine complexity
+        if jql_parts.len() > 3 {
+            complexity = QueryComplexity::Complex;
+        } else if jql_parts.len() > 1 {
+            complexity = QueryComplexity::Moderate;
+        }
+
+        // Build final JQL
+        let jql = if jql_parts.is_empty() {
+            // Default query if no filters - add 30-day constraint to avoid unbounded queries on JIRA Cloud
+            "created >= -30d ORDER BY updated DESC".to_string()
+        } else {
+            let conditions = jql_parts.join(" AND ");
+            format!("{} ORDER BY updated DESC", conditions)
+        };
+
+        debug!("Built JQL query: {}", jql);
+
+        Ok(JqlQuery {
+            jql,
+            estimated_results: None, // Could be populated with estimate logic
+            complexity,
+        })
+    }
+
     /// Build JQL for user-assigned issues
     pub fn build_user_issues_jql(
         &self,
