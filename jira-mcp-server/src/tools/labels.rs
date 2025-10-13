@@ -224,18 +224,19 @@ impl LabelsTool {
 
         if let Some(project_key) = &params.project_key {
             // Get labels specific to a project by searching issues
+            // Use JQL search via POST to avoid URL encoding issues and use v3 API
             let jql = format!("project = {} AND labels is not EMPTY", project_key);
-            // URL encode the JQL manually
-            let encoded_jql = jql.replace(" ", "%20").replace("=", "%3D");
-            let endpoint = format!(
-                "/search?jql={}&fields=labels&maxResults={}",
-                encoded_jql, max_results
-            );
+            let search_body = serde_json::json!({
+                "jql": jql,
+                "fields": ["labels"],
+                "maxResults": max_results,
+                "startAt": start_at
+            });
 
             let response: Value = self
                 .jira_client
                 .client
-                .get("api", &endpoint)
+                .post("api", "/search", search_body)
                 .await
                 .map_err(|e| {
                     JiraMcpError::internal(format!("Failed to search for labels: {}", e))

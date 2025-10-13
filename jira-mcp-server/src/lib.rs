@@ -967,6 +967,10 @@ impl JiraMcpServer {
     /// that will be used to calculate time when you complete the work. You must
     /// complete the work session before starting another one on the same todo.
     ///
+    /// IMPORTANT: When you complete, pause, or checkpoint work (which logs time to JIRA),
+    /// the issue MUST have an "Original Estimate" or "Remaining Estimate" field set.
+    /// If the issue doesn't have an estimate, you'll get a clear error with instructions.
+    ///
     /// # Examples
     /// - Start work on first todo: `{"issue_key": "PROJ-123", "todo_id_or_index": "1"}`
     /// - Start work by todo ID: `{"issue_key": "PROJ-123", "todo_id_or_index": "todo-abc123"}`
@@ -989,9 +993,11 @@ impl JiraMcpServer {
     /// Completes a work session for a todo, calculates the time spent, and logs it
     /// as a worklog entry in JIRA. Optionally marks the todo as completed.
     ///
-    /// IMPORTANT: For sessions spanning multiple days (>24 hours), you MUST provide
-    /// explicit time using time_spent_hours, time_spent_minutes, or time_spent_seconds.
-    /// This prevents accidentally logging extremely long sessions.
+    /// IMPORTANT REQUIREMENTS:
+    /// 1. The issue MUST have an "Original Estimate" or "Remaining Estimate" field set in JIRA before logging time.
+    ///    If not set, you'll receive a clear error with instructions on how to fix it.
+    /// 2. For sessions spanning multiple days (>24 hours), you MUST provide explicit time using
+    ///    time_spent_hours, time_spent_minutes, or time_spent_seconds to prevent logging extremely long sessions.
     ///
     /// # Examples
     /// - Complete same-day work: `{"todo_id_or_index": "1"}`
@@ -1018,6 +1024,10 @@ impl JiraMcpServer {
     /// Creates a checkpoint by logging the time accumulated since the session started
     /// (or since the last checkpoint), then resets the timer to continue tracking.
     /// Perfect for logging progress during long work sessions without stopping the timer.
+    ///
+    /// IMPORTANT: The issue MUST have an "Original Estimate" or "Remaining Estimate" field
+    /// set in JIRA before checkpointing. If not set, you'll receive a clear error message
+    /// with instructions. Ask the user to set an estimate in JIRA first.
     ///
     /// Benefits:
     /// - Avoid multi-day session issues by checkpointing before midnight
@@ -1071,6 +1081,10 @@ impl JiraMcpServer {
     /// Stops the active work session, calculates time spent, and logs it to JIRA.
     /// Unlike complete_todo_work, this doesn't mark the todo as completed - perfect
     /// for end-of-day saves or when you need to switch tasks temporarily.
+    ///
+    /// IMPORTANT: The issue MUST have an "Original Estimate" or "Remaining Estimate" field
+    /// set in JIRA before pausing. If not set, you'll receive a clear error message with
+    /// instructions. Ask the user to set an estimate in JIRA first.
     ///
     /// # Examples
     /// - Pause at end of day: `{"todo_id_or_index": "1", "worklog_comment": "End of day, will continue tomorrow"}`

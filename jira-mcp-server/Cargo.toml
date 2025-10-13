@@ -8,7 +8,7 @@ async-trait = {workspace = true}
 base64 = "0.22"
 chrono = {version = "0.4", features = ["serde"]}
 # JIRA integration
-gouqi = {version = "0.17.0", features = ["async"]}
+gouqi = {version = "0.19.1", features = ["async"]}
 pulseengine-mcp-macros = {workspace = true}
 pulseengine-mcp-protocol = {workspace = true}
 pulseengine-mcp-server = {workspace = true}
@@ -26,6 +26,13 @@ toml = "0.9"
 tracing = {workspace = true}
 tracing-subscriber = {workspace = true}
 
+[dev-dependencies]
+assert_matches = "1.5"
+chrono = "0.4"
+dotenv = "0.15"
+serial_test = "3.2"
+tokio-test = "0.4"
+
 [lib]
 name = "jira_mcp_server"
 path = "src/lib.rs"
@@ -39,9 +46,3 @@ license = "MIT"
 name = "jira-mcp-server"
 repository = "https://github.com/yourusername/jira-mcp-server"
 version = "0.8.0"
-
-[dev-dependencies]
-tokio-test = "0.4"
-dotenv = "0.15"
-assert_matches = "1.5"
-chrono = "0.4"

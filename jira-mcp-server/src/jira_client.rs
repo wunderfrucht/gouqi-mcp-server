@@ -524,7 +524,7 @@ impl JiraClient {
                 .as_ref()
                 .map(|u| u.display_name.clone())
                 .unwrap_or_else(|| "Unknown".to_string()),
-            body: comment.body.clone(),
+            body: comment.body.to_string(),
             created: comment
                 .created
                 .as_ref()
@@ -673,6 +673,42 @@ impl JiraClient {
         Ok(self.convert_comment_info(&comment))
     }
 
+    /// Format duration in seconds to JIRA time format (e.g., "2h 30m", "1w 2d 3h")
+    fn format_duration_jira(seconds: u64) -> String {
+        let mut remaining = seconds;
+        let mut parts = Vec::new();
+
+        // JIRA time units: 1w = 5d, 1d = 8h, 1h = 60m, 1m = 60s
+        let weeks = remaining / (5 * 8 * 3600);
+        if weeks > 0 {
+            parts.push(format!("{}w", weeks));
+            remaining -= weeks * 5 * 8 * 3600;
+        }
+
+        let days = remaining / (8 * 3600);
+        if days > 0 {
+            parts.push(format!("{}d", days));
+            remaining -= days * 8 * 3600;
+        }
+
+        let hours = remaining / 3600;
+        if hours > 0 {
+            parts.push(format!("{}h", hours));
+            remaining -= hours * 3600;
+        }
+
+        let minutes = remaining / 60;
+        if minutes > 0 {
+            parts.push(format!("{}m", minutes));
+        }
+
+        if parts.is_empty() {
+            "1m".to_string() // Minimum 1 minute
+        } else {
+            parts.join(" ")
+        }
+    }
+
     /// Add a worklog entry to an issue
     #[instrument(skip(self))]
     pub async fn add_worklog(
@@ -689,23 +725,28 @@ impl JiraClient {
 
         let timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
 
-        // Convert chrono DateTime to time OffsetDateTime if provided
+        // Convert chrono DateTime to time OffsetDateTime
         // Note: gouqi uses the `time` crate for timestamps
-        let started_time = started.map(|dt| {
-            // Use time crate's OffsetDateTime
-            use time::OffsetDateTime;
-            OffsetDateTime::from_unix_timestamp(dt.timestamp())
-                .unwrap_or_else(|_| OffsetDateTime::now_utc())
-        });
+        // Always provide a started time (defaults to now if not specified)
+        let start_dt = started.unwrap_or_else(chrono::Utc::now);
+        let started_offset = time::OffsetDateTime::from_unix_timestamp(start_dt.timestamp())
+            .unwrap_or_else(|_| time::OffsetDateTime::now_utc());
 
         let mut worklog = WorklogInput::new(time_spent_seconds);
-        if let Some(comment_text) = comment {
-            worklog = worklog.with_comment(comment_text);
-        }
-        if let Some(start_time) = started_time {
-            worklog = worklog.with_started(start_time);
-        }
+        // Always provide a comment (use default if none provided)
+        // JIRA Cloud v3 API requires comment field to be present
+        let comment_text = comment.unwrap_or_else(|| "Work logged".to_string());
+        worklog = worklog.with_comment(comment_text);
 
+        // Provide time_spent in human-readable format (required by JIRA)
+        let time_spent_str = Self::format_duration_jira(time_spent_seconds);
+        worklog = worklog.with_time_spent(&time_spent_str);
+
+        // Set the started time
+        worklog = worklog.with_started(started_offset);
+
+        // Use basic add_worklog without estimate adjustment options
+        // This should work even if the issue has no initial estimate set
         let result = timeout(timeout_duration, async {
             self.client.issues().add_worklog(issue_key, worklog).await
         })
@@ -714,12 +755,30 @@ impl JiraClient {
             JiraMcpError::network(format!("Timeout adding worklog to issue {}", issue_key))
         })?
         .map_err(|e| {
-            if e.to_string().contains("404") || e.to_string().contains("Not Found") {
+            let error_str = e.to_string();
+            if error_str.contains("404") || error_str.contains("Not Found") {
                 JiraMcpError::not_found("issue", issue_key)
-            } else if e.to_string().contains("403") || e.to_string().contains("Forbidden") {
+            } else if error_str.contains("403") || error_str.contains("Forbidden") {
                 JiraMcpError::permission(format!(
                     "Permission denied adding worklog to issue {}",
                     issue_key
+                ))
+            } else if error_str.contains("manual estimate adjustment")
+                || error_str.contains("timeSpent")
+                || error_str.contains("Worklog must not be null") {
+                // This error typically means the issue doesn't have an initial time estimate set
+                JiraMcpError::internal(format!(
+                    "Failed to add worklog to {}: The issue needs an initial time estimate/remaining estimate field set in JIRA.\n\
+                     \n\
+                     To fix this:\n\
+                     1. Open the issue in JIRA\n\
+                     2. Set the 'Original Estimate' or 'Remaining Estimate' field (e.g., '1w' for 1 week, '8h' for 8 hours)\n\
+                     3. Then try adding the worklog again\n\
+                     \n\
+                     JIRA Cloud requires an initial estimate before worklogs can be added.\n\
+                     \n\
+                     Error details: {}",
+                    issue_key, e
                 ))
             } else {
                 JiraMcpError::internal(format!("Failed to add worklog: {}", e))
@@ -777,7 +836,7 @@ impl JiraClient {
                 .as_ref()
                 .map(|u| u.display_name.clone())
                 .unwrap_or_else(|| "Unknown".to_string()),
-            comment: worklog.comment.clone(),
+            comment: worklog.comment.as_ref().map(|c| c.to_string()),
             created: worklog.created.map(|dt| dt.to_string()).unwrap_or_default(),
             updated: worklog.updated.map(|dt| dt.to_string()).unwrap_or_default(),
             started: worklog.started.map(|dt| dt.to_string()).unwrap_or_default(),
