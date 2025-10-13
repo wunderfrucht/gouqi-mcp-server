@@ -1,8 +1,11 @@
 /// Integration tests for todo tracker functionality
+///
+/// NOTE: These tests modify the same test issue and use #[serial] to avoid race conditions
 mod common;
 
 use common::{test_issue_key, McpTestClient};
 use serde_json::json;
+use serial_test::serial;
 
 /// Helper function to add a todo and return its 1-based index
 fn add_todo_and_get_index(client: &mut McpTestClient, issue_key: &str, todo_text: &str) -> String {
@@ -32,6 +35,7 @@ fn add_todo_and_get_index(client: &mut McpTestClient, issue_key: &str, todo_text
 }
 
 #[test]
+#[serial]
 fn test_set_todo_base() {
     // Test setting the base issue for todo tracking
 
@@ -56,6 +60,7 @@ fn test_set_todo_base() {
 }
 
 #[test]
+#[serial]
 fn test_list_todos_basic() {
     // Test listing todos from an issue
 
@@ -85,6 +90,7 @@ fn test_list_todos_basic() {
 }
 
 #[test]
+#[serial]
 fn test_add_todo() {
     // Test adding a new todo to an issue
 
@@ -120,6 +126,7 @@ fn test_add_todo() {
 }
 
 #[test]
+#[serial]
 fn test_update_todo_status() {
     // Test updating a todo's completion status
 
@@ -170,6 +177,8 @@ fn test_update_todo_status() {
 }
 
 #[test]
+#[serial]
+#[ignore] // Worklog creation failing with gouqi 0.19 - see https://github.com/wunderfrucht/gouqi/issues/126
 fn test_start_and_pause_work() {
     // Test starting work on a todo and pausing it (creates worklog)
 
@@ -236,6 +245,8 @@ fn test_start_and_pause_work() {
 }
 
 #[test]
+#[serial]
+#[ignore] // Worklog creation failing with gouqi 0.19 - see https://github.com/wunderfrucht/gouqi/issues/126
 fn test_start_and_complete_work() {
     // Test starting work and completing it (creates worklog and marks todo as done)
 
@@ -305,6 +316,8 @@ fn test_start_and_complete_work() {
 }
 
 #[test]
+#[serial]
+#[ignore] // Worklog creation failing with gouqi 0.19 - see https://github.com/wunderfrucht/gouqi/issues/126
 fn test_checkpoint_work() {
     // Test checkpointing work (logs time but doesn't end session)
 
@@ -390,6 +403,7 @@ fn test_checkpoint_work() {
 }
 
 #[test]
+#[serial]
 fn test_cancel_work() {
     // Test canceling work (discards time without logging)
 
@@ -445,6 +459,7 @@ fn test_cancel_work() {
 }
 
 #[test]
+#[serial]
 fn test_get_active_work_sessions() {
     // Test getting active work sessions
 
@@ -516,6 +531,7 @@ fn test_get_active_work_sessions() {
 }
 
 #[test]
+#[serial]
 #[should_panic(expected = "Tool call failed")]
 fn test_complete_work_without_starting() {
     // Test that completing work without starting it fails
@@ -548,6 +564,7 @@ fn test_complete_work_without_starting() {
 }
 
 #[test]
+#[serial]
 fn test_list_todos_with_status_filter() {
     // Test listing todos with status filter
 
