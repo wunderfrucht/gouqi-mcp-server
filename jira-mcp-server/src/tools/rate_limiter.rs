@@ -34,6 +34,9 @@ impl RateLimiter {
     ///
     /// # Example
     /// ```
+    /// use jira_mcp_server::tools::rate_limiter::RateLimiter;
+    /// use std::time::Duration;
+    ///
     /// // 100 requests per 60 seconds (similar to JIRA Cloud limits)
     /// let limiter = RateLimiter::new(100, Duration::from_secs(60));
     /// ```
