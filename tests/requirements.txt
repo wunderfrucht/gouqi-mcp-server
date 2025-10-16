@@ -1,6 +1,0 @@
-# Testing dependencies for JIRA MCP Server
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-mcp>=1.17.0
-python-dotenv>=1.0.0
-pytest-timeout>=2.3.0
