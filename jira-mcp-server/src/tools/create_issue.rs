@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::{info, instrument};
 
 /// Parameters for creating a new JIRA issue
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct CreateIssueParams {
     /// Project key where the issue will be created (e.g., "PROJ", "DEV")
     /// Can be inferred from parent_issue_key if not provided

@@ -4,6 +4,7 @@
 
 pub mod add_comment;
 pub mod assign_issue;
+pub mod bulk_operations;
 pub mod components;
 pub mod create_issue;
 pub mod download_attachment;
@@ -14,6 +15,7 @@ pub mod issue_links;
 pub mod issue_relationships;
 pub mod labels;
 pub mod list_attachments;
+pub mod rate_limiter;
 pub mod search_issues;
 pub mod sprints;
 pub mod todo_tracker;
@@ -24,6 +26,7 @@ pub mod user_issues;
 
 pub use add_comment::*;
 pub use assign_issue::*;
+pub use bulk_operations::*;
 pub use components::*;
 pub use create_issue::*;
 pub use download_attachment::*;
