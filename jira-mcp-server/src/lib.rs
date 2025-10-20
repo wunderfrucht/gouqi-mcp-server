@@ -24,9 +24,10 @@ use crate::tools::{
     BulkCreateIssuesResult, BulkOperationsTool, BulkTransitionIssuesParams,
     BulkTransitionIssuesResult, BulkUpdateFieldsParams, BulkUpdateFieldsResult,
     CancelTodoWorkParams, CancelTodoWorkResult, CheckpointTodoWorkParams, CheckpointTodoWorkResult,
-    CompleteTodoWorkParams, CompleteTodoWorkResult, ComponentsTool, CreateIssueParams,
-    CreateIssueResult, CreateIssueTool, DeleteIssueLinkParams, DeleteIssueLinkResult,
-    DeleteIssueLinkTool, DownloadAttachmentParams, DownloadAttachmentResult,
+    CloseSprintParams, CloseSprintResult, CloseSprintTool, CompleteTodoWorkParams,
+    CompleteTodoWorkResult, ComponentsTool, CreateIssueParams, CreateIssueResult, CreateIssueTool,
+    CreateSprintParams, CreateSprintResult, CreateSprintTool, DeleteIssueLinkParams,
+    DeleteIssueLinkResult, DeleteIssueLinkTool, DownloadAttachmentParams, DownloadAttachmentResult,
     DownloadAttachmentTool, GetActiveWorkSessionsResult, GetAvailableComponentsParams,
     GetAvailableComponentsResult, GetAvailableLabelsParams, GetAvailableLabelsResult,
     GetAvailableTransitionsParams, GetAvailableTransitionsResult, GetAvailableTransitionsTool,
@@ -41,11 +42,11 @@ use crate::tools::{
     ListSprintsTool, ListTodosParams, ListTodosResult, ManageLabelsParams, ManageLabelsResult,
     MoveToSprintParams, MoveToSprintResult, MoveToSprintTool, PauseTodoWorkParams,
     PauseTodoWorkResult, SearchIssuesParams, SearchIssuesResult, SearchIssuesTool,
-    SetTodoBaseParams, SetTodoBaseResult, StartTodoWorkParams, StartTodoWorkResult, TodoTracker,
-    TransitionIssueParams, TransitionIssueResult, TransitionIssueTool, UpdateComponentsParams,
-    UpdateComponentsResult, UpdateCustomFieldsParams, UpdateCustomFieldsResult,
-    UpdateCustomFieldsTool, UpdateDescription, UpdateDescriptionParams, UpdateDescriptionResult,
-    UpdateTodoParams, UpdateTodoResult,
+    SetTodoBaseParams, SetTodoBaseResult, StartSprintParams, StartSprintResult, StartSprintTool,
+    StartTodoWorkParams, StartTodoWorkResult, TodoTracker, TransitionIssueParams,
+    TransitionIssueResult, TransitionIssueTool, UpdateComponentsParams, UpdateComponentsResult,
+    UpdateCustomFieldsParams, UpdateCustomFieldsResult, UpdateCustomFieldsTool, UpdateDescription,
+    UpdateDescriptionParams, UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -120,6 +121,9 @@ pub struct JiraMcpServer {
     get_sprint_info_tool: Arc<GetSprintInfoTool>,
     get_sprint_issues_tool: Arc<GetSprintIssuesTool>,
     move_to_sprint_tool: Arc<MoveToSprintTool>,
+    create_sprint_tool: Arc<CreateSprintTool>,
+    start_sprint_tool: Arc<StartSprintTool>,
+    close_sprint_tool: Arc<CloseSprintTool>,
     link_issues_tool: Arc<LinkIssuesTool>,
     delete_issue_link_tool: Arc<DeleteIssueLinkTool>,
     get_issue_link_types_tool: Arc<GetIssueLinkTypesTool>,
@@ -247,6 +251,9 @@ impl JiraMcpServer {
         let get_sprint_info_tool = Arc::new(GetSprintInfoTool::new(Arc::clone(&jira_client)));
         let get_sprint_issues_tool = Arc::new(GetSprintIssuesTool::new(Arc::clone(&jira_client)));
         let move_to_sprint_tool = Arc::new(MoveToSprintTool::new(Arc::clone(&jira_client)));
+        let create_sprint_tool = Arc::new(CreateSprintTool::new(Arc::clone(&jira_client)));
+        let start_sprint_tool = Arc::new(StartSprintTool::new(Arc::clone(&jira_client)));
+        let close_sprint_tool = Arc::new(CloseSprintTool::new(Arc::clone(&jira_client)));
 
         // Issue linking tools
         let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
@@ -292,6 +299,9 @@ impl JiraMcpServer {
             get_sprint_info_tool,
             get_sprint_issues_tool,
             move_to_sprint_tool,
+            create_sprint_tool,
+            start_sprint_tool,
+            close_sprint_tool,
             link_issues_tool,
             delete_issue_link_tool,
             get_issue_link_types_tool,
@@ -393,6 +403,9 @@ impl JiraMcpServer {
         let get_sprint_info_tool = Arc::new(GetSprintInfoTool::new(Arc::clone(&jira_client)));
         let get_sprint_issues_tool = Arc::new(GetSprintIssuesTool::new(Arc::clone(&jira_client)));
         let move_to_sprint_tool = Arc::new(MoveToSprintTool::new(Arc::clone(&jira_client)));
+        let create_sprint_tool = Arc::new(CreateSprintTool::new(Arc::clone(&jira_client)));
+        let start_sprint_tool = Arc::new(StartSprintTool::new(Arc::clone(&jira_client)));
+        let close_sprint_tool = Arc::new(CloseSprintTool::new(Arc::clone(&jira_client)));
 
         // Issue linking tools
         let link_issues_tool = Arc::new(LinkIssuesTool::new(Arc::clone(&jira_client)));
@@ -432,6 +445,9 @@ impl JiraMcpServer {
             get_sprint_info_tool,
             get_sprint_issues_tool,
             move_to_sprint_tool,
+            create_sprint_tool,
+            start_sprint_tool,
+            close_sprint_tool,
             link_issues_tool,
             delete_issue_link_tool,
             get_issue_link_types_tool,
@@ -549,7 +565,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 44, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base, list_sprints, get_sprint_info, get_sprint_issues, move_to_sprint, link_issues, delete_issue_link, get_issue_link_types, manage_labels, get_available_labels, update_components, get_available_components, bulk_create_issues, bulk_transition_issues, bulk_update_fields, bulk_assign_issues, bulk_add_labels
+            tools_count: 47, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base, list_sprints, get_sprint_info, get_sprint_issues, move_to_sprint, create_sprint, start_sprint, close_sprint, link_issues, delete_issue_link, get_issue_link_types, manage_labels, get_available_labels, update_components, get_available_components, bulk_create_issues, bulk_transition_issues, bulk_update_fields, bulk_assign_issues, bulk_add_labels
         })
     }
 
@@ -1235,6 +1251,84 @@ impl JiraMcpServer {
             .await
             .map_err(|e: JiraMcpError| {
                 error!("move_to_sprint failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Create a new sprint on a board
+    ///
+    /// Creates a future sprint with the specified name. Dates can be set immediately
+    /// or later when starting the sprint.
+    ///
+    /// # Examples
+    /// - Create basic sprint: `{"board_id": 1, "name": "Sprint 42"}`
+    /// - With dates: `{"board_id": 1, "name": "Sprint 42", "start_date": "2025-01-20T00:00:00Z", "end_date": "2025-02-03T23:59:59Z"}`
+    #[instrument(skip(self))]
+    pub async fn create_sprint(
+        &self,
+        params: CreateSprintParams,
+    ) -> anyhow::Result<CreateSprintResult> {
+        self.create_sprint_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("create_sprint failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Start a sprint
+    ///
+    /// Transitions a future sprint to active state. Requires an end date to be set
+    /// either on the sprint already or provided as a parameter.
+    ///
+    /// Validations:
+    /// - Sprint must be in "future" state (not already active or closed)
+    /// - End date must be set
+    /// - Warns if sprint has no issues
+    ///
+    /// # Examples
+    /// - Start with existing dates: `{"sprint_id": 123}`
+    /// - Start and set end date: `{"sprint_id": 123, "end_date": "2025-02-03T23:59:59Z"}`
+    /// - Start with custom start: `{"sprint_id": 123, "start_date": "2025-01-20T08:00:00Z", "end_date": "2025-02-03T18:00:00Z"}`
+    #[instrument(skip(self))]
+    pub async fn start_sprint(
+        &self,
+        params: StartSprintParams,
+    ) -> anyhow::Result<StartSprintResult> {
+        self.start_sprint_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("start_sprint failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Close a sprint
+    ///
+    /// Closes an active sprint and provides completion statistics. Optionally moves
+    /// incomplete issues to another sprint for continuity.
+    ///
+    /// Features:
+    /// - Calculates completion rate (done vs total issues)
+    /// - Optionally moves incomplete issues to next sprint
+    /// - Provides warnings about incomplete work
+    /// - JIRA automatically sets complete date to current time
+    ///
+    /// # Examples
+    /// - Simple close: `{"sprint_id": 123}`
+    /// - Move incomplete to next: `{"sprint_id": 123, "move_incomplete_to": 124}`
+    #[instrument(skip(self))]
+    pub async fn close_sprint(
+        &self,
+        params: CloseSprintParams,
+    ) -> anyhow::Result<CloseSprintResult> {
+        self.close_sprint_tool
+            .execute(params)
+            .await
+            .map_err(|e: JiraMcpError| {
+                error!("close_sprint failed: {}", e);
                 anyhow::anyhow!(e)
             })
     }
