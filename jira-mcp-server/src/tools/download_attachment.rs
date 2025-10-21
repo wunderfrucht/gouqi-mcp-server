@@ -10,8 +10,9 @@ use crate::jira_client::JiraClient;
 use base64::{engine::general_purpose, Engine as _};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, instrument, warn};
+use tracing::{info, warn};
 
 /// Parameters for the download_attachment tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -28,6 +29,16 @@ pub struct DownloadAttachmentParams {
     /// Maximum file size to download in bytes (optional, default: 10MB)
     /// Files larger than this will be rejected to prevent memory issues
     pub max_size_bytes: Option<u64>,
+
+    /// Optional: Save attachment to filesystem path (optional)
+    /// If provided, attachment will be saved to this path.
+    /// Path must be relative to current working directory for security.
+    /// Example: "downloads/attachment.pdf"
+    pub save_to_path: Option<String>,
+
+    /// Whether to return content in response (optional, default: true if save_to_path not set)
+    /// Set to false when save_to_path is used to avoid returning large content
+    pub return_content: Option<bool>,
 }
 
 /// Result from the download_attachment tool
@@ -37,13 +48,20 @@ pub struct DownloadAttachmentResult {
     pub attachment_info: AttachmentMetadata,
 
     /// File content (base64 encoded if base64_encoded=true)
-    pub content: String,
+    /// Will be empty if return_content=false
+    pub content: Option<String>,
 
     /// Whether content is base64 encoded
     pub is_base64_encoded: bool,
 
+    /// Path where file was saved (if save_to_path was provided)
+    pub saved_to_path: Option<String>,
+
     /// Performance information
     pub performance: DownloadPerformance,
+
+    /// Success message
+    pub message: String,
 }
 
 /// Attachment metadata returned with download
@@ -109,7 +127,6 @@ impl DownloadAttachmentTool {
     }
 
     /// Execute the download_attachment tool
-    #[instrument(skip(self), fields(attachment_id = %params.attachment_id))]
     pub async fn execute(
         &self,
         params: DownloadAttachmentParams,
@@ -128,6 +145,10 @@ impl DownloadAttachmentTool {
         let base64_encoded = params.base64_encoded.unwrap_or(true);
         let max_size = params.max_size_bytes.unwrap_or(10 * 1024 * 1024); // 10MB default
 
+        // Determine if we should return content
+        let should_save = params.save_to_path.is_some();
+        let should_return_content = params.return_content.unwrap_or(!should_save);
+
         // First, get attachment metadata to check size and get info
         let attachment_metadata = self.get_attachment_metadata(&params.attachment_id).await?;
         api_calls += 1;
@@ -143,14 +164,46 @@ impl DownloadAttachmentTool {
             ));
         }
 
-        // Download the actual content
-        let content = self
-            .download_content(&params.attachment_id, base64_encoded)
-            .await?;
+        // Download the actual content (raw bytes)
+        let content_bytes = self.download_content(&params.attachment_id).await?;
         api_calls += 1;
 
+        let bytes_downloaded = content_bytes.len() as u64;
+
+        // Save to filesystem if requested
+        let saved_path = if let Some(save_path) = &params.save_to_path {
+            let validated_path = self.validate_and_prepare_save_path(save_path)?;
+            std::fs::write(&validated_path, &content_bytes).map_err(|e| {
+                JiraMcpError::internal(format!(
+                    "Failed to save attachment to '{}': {}",
+                    validated_path.display(),
+                    e
+                ))
+            })?;
+            info!("Saved attachment to: {}", validated_path.display());
+            Some(validated_path.to_string_lossy().to_string())
+        } else {
+            None
+        };
+
+        // Encode content if needed for return
+        let content = if should_return_content {
+            if base64_encoded {
+                Some(general_purpose::STANDARD.encode(&content_bytes))
+            } else {
+                // Try to convert to UTF-8 string
+                Some(
+                    String::from_utf8(content_bytes.clone()).unwrap_or_else(|_| {
+                        // If not valid UTF-8, return base64 anyway
+                        general_purpose::STANDARD.encode(&content_bytes)
+                    }),
+                )
+            }
+        } else {
+            None
+        };
+
         let duration = start_time.elapsed();
-        let bytes_downloaded = attachment_metadata.size;
         let download_speed_bps = if duration.as_secs() > 0 {
             bytes_downloaded / duration.as_secs()
         } else {
@@ -173,16 +226,41 @@ impl DownloadAttachmentTool {
             );
         }
 
+        // Build success message
+        let message = match (&saved_path, should_return_content) {
+            (Some(path), true) => {
+                format!(
+                    "Downloaded attachment '{}' ({} bytes) and saved to '{}'",
+                    attachment_metadata.filename, bytes_downloaded, path
+                )
+            }
+            (Some(path), false) => {
+                format!(
+                    "Downloaded and saved attachment '{}' ({} bytes) to '{}'",
+                    attachment_metadata.filename, bytes_downloaded, path
+                )
+            }
+            (None, true) => {
+                format!(
+                    "Downloaded attachment '{}' ({} bytes)",
+                    attachment_metadata.filename, bytes_downloaded
+                )
+            }
+            (None, false) => "Downloaded attachment (content not returned)".to_string(),
+        };
+
         Ok(DownloadAttachmentResult {
             attachment_info: attachment_metadata,
             content,
             is_base64_encoded: base64_encoded,
+            saved_to_path: saved_path,
             performance: DownloadPerformance {
                 duration_ms: duration.as_millis() as u64,
                 api_calls,
                 bytes_downloaded,
                 download_speed_bps,
             },
+            message,
         })
     }
 
@@ -216,49 +294,89 @@ impl DownloadAttachmentTool {
         Ok(())
     }
 
-    /// Get attachment metadata
+    /// Get attachment metadata using gouqi API
     async fn get_attachment_metadata(
         &self,
         attachment_id: &str,
     ) -> JiraMcpResult<AttachmentMetadata> {
-        // This would use gouqi's attachment API to get metadata
-        // For now, we'll return a placeholder - this needs to be implemented
-        // based on the actual gouqi attachment API
-
-        // TODO: Implement actual metadata fetching using gouqi
-        // Example: let metadata = self.jira_client.attachments().get(attachment_id).await?;
+        // Use gouqi's attachments().get() to fetch metadata
+        let attachment = self
+            .jira_client
+            .client
+            .attachments()
+            .get(attachment_id)
+            .await?;
 
         Ok(AttachmentMetadata {
             id: attachment_id.to_string(),
-            filename: "example.txt".to_string(),
-            size: 1024,
-            mime_type: "text/plain".to_string(),
-            author: "Unknown".to_string(),
-            created: "2024-01-01T00:00:00Z".to_string(),
+            filename: attachment.filename,
+            size: attachment.size,
+            mime_type: attachment.mime_type,
+            author: attachment.author.display_name,
+            created: attachment.created,
         })
     }
 
-    /// Download attachment content
-    async fn download_content(
-        &self,
-        _attachment_id: &str,
-        base64_encoded: bool,
-    ) -> JiraMcpResult<String> {
-        // This would use gouqi's attachment API to download content
-        // For now, we'll return a placeholder - this needs to be implemented
+    /// Download attachment content as raw bytes using gouqi API
+    async fn download_content(&self, attachment_id: &str) -> JiraMcpResult<Vec<u8>> {
+        // Use gouqi's attachments().download() to fetch raw bytes
+        // Use spawn_blocking with sync client to work around Send issues
+        let jira_url = self.config.jira_url.clone();
+        let credentials = self.config.to_gouqi_credentials();
+        let id = attachment_id.to_string();
 
-        // TODO: Implement actual content download using gouqi
-        // Example: let content = self.jira_client.attachments().download(attachment_id).await?;
+        let content_bytes = tokio::task::spawn_blocking(move || {
+            let sync_client = gouqi::Jira::new(&jira_url, credentials)?;
+            sync_client.attachments().download(&id)
+        })
+        .await
+        .map_err(|e| JiraMcpError::internal(format!("Task join error: {}", e)))??;
 
-        let placeholder_content = if base64_encoded {
-            // Return base64 encoded placeholder
-            general_purpose::STANDARD.encode("This is placeholder attachment content")
-        } else {
-            // Return raw placeholder
-            "This is placeholder attachment content".to_string()
-        };
+        Ok(content_bytes)
+    }
 
-        Ok(placeholder_content)
+    /// Validate and prepare filesystem path for saving
+    fn validate_and_prepare_save_path(&self, path_str: &str) -> JiraMcpResult<PathBuf> {
+        let path = Path::new(path_str);
+
+        // Reject absolute paths for security
+        if path.is_absolute() {
+            return Err(JiraMcpError::invalid_param(
+                "save_to_path",
+                "Absolute paths are not allowed. Use relative paths only for security.",
+            ));
+        }
+
+        // Reject paths with parent directory traversal
+        for component in path.components() {
+            if let std::path::Component::ParentDir = component {
+                return Err(JiraMcpError::invalid_param(
+                    "save_to_path",
+                    "Path traversal (..) is not allowed for security.",
+                ));
+            }
+        }
+
+        // Get current working directory
+        let cwd = std::env::current_dir().map_err(|e| {
+            JiraMcpError::internal(format!("Failed to get current directory: {}", e))
+        })?;
+
+        // Join with current directory
+        let full_path = cwd.join(path);
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                JiraMcpError::internal(format!(
+                    "Failed to create directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+
+        Ok(full_path)
     }
 }
 
@@ -280,6 +398,8 @@ mod tests {
             attachment_id: "12345".to_string(),
             base64_encoded: Some(true),
             max_size_bytes: Some(1024 * 1024), // 1MB
+            save_to_path: None,
+            return_content: Some(true),
         }
     }
 

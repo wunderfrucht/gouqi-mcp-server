@@ -47,6 +47,7 @@ use crate::tools::{
     TransitionIssueResult, TransitionIssueTool, UpdateComponentsParams, UpdateComponentsResult,
     UpdateCustomFieldsParams, UpdateCustomFieldsResult, UpdateCustomFieldsTool, UpdateDescription,
     UpdateDescriptionParams, UpdateDescriptionResult, UpdateTodoParams, UpdateTodoResult,
+    UploadAttachmentParams, UploadAttachmentResult, UploadAttachmentTool,
 };
 
 use pulseengine_mcp_macros::{mcp_server, mcp_tools};
@@ -106,6 +107,7 @@ pub struct JiraMcpServer {
     user_issues_tool: Arc<GetUserIssuesTool>,
     list_attachments_tool: Arc<ListAttachmentsTool>,
     download_attachment_tool: Arc<DownloadAttachmentTool>,
+    upload_attachment_tool: Arc<UploadAttachmentTool>,
     add_comment_tool: Arc<AddCommentTool>,
     issue_relationships_tool: Arc<IssueRelationshipsTool>,
     update_description_tool: Arc<UpdateDescription>,
@@ -209,6 +211,12 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let upload_attachment_tool = Arc::new(UploadAttachmentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         let add_comment_tool = Arc::new(AddCommentTool::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
@@ -284,6 +292,7 @@ impl JiraMcpServer {
             user_issues_tool,
             list_attachments_tool,
             download_attachment_tool,
+            upload_attachment_tool,
             add_comment_tool,
             issue_relationships_tool,
             update_description_tool,
@@ -361,6 +370,12 @@ impl JiraMcpServer {
             Arc::clone(&cache),
         ));
 
+        let upload_attachment_tool = Arc::new(UploadAttachmentTool::new(
+            Arc::clone(&jira_client),
+            Arc::clone(&config),
+            Arc::clone(&cache),
+        ));
+
         let add_comment_tool = Arc::new(AddCommentTool::new(
             Arc::clone(&jira_client),
             Arc::clone(&config),
@@ -430,6 +445,7 @@ impl JiraMcpServer {
             user_issues_tool,
             list_attachments_tool,
             download_attachment_tool,
+            upload_attachment_tool,
             add_comment_tool,
             issue_relationships_tool,
             update_description_tool,
@@ -565,7 +581,7 @@ impl JiraMcpServer {
             jira_connection_status: connection_status,
             authenticated_user,
             cache_stats: self.cache.get_stats(),
-            tools_count: 47, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base, list_sprints, get_sprint_info, get_sprint_issues, move_to_sprint, create_sprint, start_sprint, close_sprint, link_issues, delete_issue_link, get_issue_link_types, manage_labels, get_available_labels, update_components, get_available_components, bulk_create_issues, bulk_transition_issues, bulk_update_fields, bulk_assign_issues, bulk_add_labels
+            tools_count: 48, // search_issues, get_issue_details, get_user_issues, list_issue_attachments, download_attachment, upload_attachment, get_server_status, clear_cache, test_connection, add_comment, update_issue_description, get_issue_relationships, get_available_transitions, transition_issue, assign_issue, get_custom_fields, update_custom_fields, create_issue, get_create_metadata, list_todos, add_todo, update_todo, start_todo_work, complete_todo_work, checkpoint_todo_work, pause_todo_work, cancel_todo_work, get_active_work_sessions, set_todo_base, list_sprints, get_sprint_info, get_sprint_issues, move_to_sprint, create_sprint, start_sprint, close_sprint, link_issues, delete_issue_link, get_issue_link_types, manage_labels, get_available_labels, update_components, get_available_components, bulk_create_issues, bulk_transition_issues, bulk_update_fields, bulk_assign_issues, bulk_add_labels
         })
     }
 
@@ -619,7 +635,6 @@ impl JiraMcpServer {
     /// - Download attachment: `{"attachment_id": "12345"}`
     /// - Download with size limit: `{"attachment_id": "12345", "max_size_bytes": 5242880}`
     /// - Download as raw content: `{"attachment_id": "12345", "base64_encoded": false}`
-    #[instrument(skip(self))]
     pub async fn download_attachment(
         &self,
         params: DownloadAttachmentParams,
@@ -629,6 +644,34 @@ impl JiraMcpServer {
             .await
             .map_err(|e| {
                 error!("download_attachment failed: {}", e);
+                anyhow::anyhow!(e)
+            })
+    }
+
+    /// Upload attachments to a JIRA issue
+    ///
+    /// Adds one or more files as attachments to an existing JIRA issue.
+    /// Supports both inline base64 content and reading from filesystem.
+    ///
+    /// # Features
+    /// - Upload multiple files in a single operation
+    /// - Inline base64 content OR filesystem paths
+    /// - Automatic MIME type detection
+    /// - Size limits for safety (default 10MB total)
+    /// - Secure path validation for filesystem access
+    ///
+    /// # Examples
+    /// - Upload from inline content: `{"issue_key": "PROJ-123", "files": [{"filename": "doc.pdf", "content_base64": "..."}]}`
+    /// - Upload from filesystem: `{"issue_key": "PROJ-123", "file_paths": ["reports/report.pdf"]}`
+    pub async fn upload_attachment(
+        &self,
+        params: UploadAttachmentParams,
+    ) -> anyhow::Result<UploadAttachmentResult> {
+        self.upload_attachment_tool
+            .execute(params)
+            .await
+            .map_err(|e| {
+                error!("upload_attachment failed: {}", e);
                 anyhow::anyhow!(e)
             })
     }
