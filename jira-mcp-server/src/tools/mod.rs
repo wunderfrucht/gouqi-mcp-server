@@ -22,6 +22,7 @@ pub mod todo_tracker;
 pub mod transitions;
 pub mod update_custom_fields;
 pub mod update_description;
+pub mod upload_attachment;
 pub mod user_issues;
 
 pub use add_comment::*;
@@ -43,4 +44,5 @@ pub use todo_tracker::*;
 pub use transitions::*;
 pub use update_custom_fields::*;
 pub use update_description::*;
+pub use upload_attachment::*;
 pub use user_issues::*;
