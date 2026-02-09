@@ -15,7 +15,7 @@ pulseengine-mcp-protocol = {version = "0.13.0"}
 # PulseEngine MCP Framework - Published v0.13.0
 pulseengine-mcp-server = {version = "0.13.0", features = ["stdio-logging"]}
 pulseengine-mcp-transport = {version = "0.13.0"}
-rand = "0.9"
+rand = "0.10"
 schemars = {version = "1.0", features = ["derive"]}
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
